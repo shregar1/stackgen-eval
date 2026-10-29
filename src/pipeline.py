@@ -1,4 +1,11 @@
-"""Pipeline orchestrator for hybrid agent evaluation."""
+"""Pipeline orchestrator for hybrid agent evaluation.
+
+Integrates:
+- Factory Pattern: Creates handler chain and execution strategy
+- Chain of Responsibility: Dispatches trace through sequential, short-circuiting handlers
+- Strategy Pattern: Selects execution mode (TieredHybrid vs DeterministicOnly)
+- Observer Pattern: Publishes lifecycle events and collects performance metrics
+"""
 
 import time
 import logging
@@ -13,46 +20,55 @@ from src.models import (
 )
 from src.evaluators.deterministic import DeterministicEvaluatorEngine
 from src.evaluators.llm_judge import LLMJudgeEngine
+from src.evaluators.registry import EvaluatorFactory
+from src.evaluators.strategies import IEvaluationStrategy
+from src.core.events import EventBus, MetricsCollectorObserver
 
 logger = logging.getLogger(__name__)
 
 
 class EvaluationPipeline:
     """
-    Tiered evaluation pipeline combining deterministic heuristics (Stage 1)
-    and LLM-as-a-Judge (Stage 2).
+    Production evaluation pipeline orchestrating Chain of Responsibility,
+    Strategy selection, and Event-driven metrics collection.
     """
 
     def __init__(
         self,
         config: EvaluationConfig = default_config,
         deterministic_engine: Optional[DeterministicEvaluatorEngine] = None,
-        llm_judge_engine: Optional[LLMJudgeEngine] = None
+        llm_judge_engine: Optional[LLMJudgeEngine] = None,
+        strategy: Optional[IEvaluationStrategy] = None,
+        event_bus: Optional[EventBus] = None
     ):
         self.config = config
         self.deterministic = deterministic_engine or DeterministicEvaluatorEngine(config)
         self.llm_judge = llm_judge_engine or LLMJudgeEngine(config)
 
+        # Factory Pattern: Build Chain & Strategy
+        self.chain = EvaluatorFactory.create_chain(self.deterministic, self.llm_judge)
+        self.strategy = strategy or EvaluatorFactory.create_strategy(config.mode)
+
+        # Observer Pattern: Event Bus & Metrics Collector
+        self.event_bus = event_bus or EventBus()
+        self.metrics_collector = MetricsCollectorObserver()
+        self.event_bus.subscribe(self.metrics_collector)
+
     def evaluate_trace(self, trace: Trace) -> TraceEvaluation:
         """
-        Evaluate a single trace.
-        - Stage 1: Deterministic fast-fail checks.
-        - Stage 2: Semantic, temporal, and causal LLM judge checks.
+        Evaluate a single trace through Strategy and Handler Chain,
+        publishing lifecycle events.
         """
-        if self.config.mode in ("hybrid", "deterministic_only"):
-            det_result = self.deterministic.evaluate(trace)
-            if det_result is not None:
-                return det_result
-            if self.config.mode == "deterministic_only":
-                return TraceEvaluation(
-                    trace_id=trace.trace_id,
-                    evaluator_type=det_result.evaluator_type if det_result else "deterministic",
-                    result=EvalVerdict.PASS,
-                    reasons=[]
-                )
+        start = time.perf_counter()
+        self.event_bus.notify_trace_start(trace)
 
-        # Stage 2: Hand off to LLM Judge
-        return self.llm_judge.evaluate(trace)
+        # Execute selected evaluation strategy
+        evaluation = self.strategy.evaluate(trace, self.chain)
+
+        elapsed_ms = (time.perf_counter() - start) * 1000.0
+        self.event_bus.notify_trace_evaluated(trace, evaluation, elapsed_ms)
+
+        return evaluation
 
     def evaluate_all(self, traces: List[Trace]) -> EvaluationBatchResult:
         """Evaluate a batch of traces and compile aggregate statistics."""
@@ -70,14 +86,9 @@ class EvaluationPipeline:
             if res.result == EvalVerdict.PASS:
                 total_passes += 1
 
-        elapsed = time.perf_counter() - start_time
+        total_elapsed_s = time.perf_counter() - start_time
         total_traces = len(traces)
         pass_rate = round(total_passes / total_traces, 3) if total_traces > 0 else 0.0
-
-        logger.info(
-            f"Evaluation finished: {total_traces} traces evaluated in {elapsed:.3f}s. "
-            f"Pass rate: {pass_rate:.1%}, Release Blockers: {total_blockers}."
-        )
 
         summary = EvaluationSummary(
             total_traces=total_traces,
@@ -85,4 +96,13 @@ class EvaluationPipeline:
             total_release_blockers=total_blockers
         )
 
-        return EvaluationBatchResult(summary=summary, traces=results)
+        batch_result = EvaluationBatchResult(summary=summary, traces=results)
+        self.event_bus.notify_batch_complete(batch_result, total_elapsed_s)
+
+        logger.info(
+            f"Evaluation finished: {total_traces} traces evaluated in {total_elapsed_s:.3f}s. "
+            f"Avg latency: {self.metrics_collector.avg_latency_ms:.2f}ms. "
+            f"Pass rate: {pass_rate:.1%}, Release Blockers: {total_blockers}."
+        )
+
+        return batch_result

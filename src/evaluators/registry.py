@@ -1,10 +1,22 @@
 """Registry & Factory Pattern: Dynamic discovery and construction of rules and evaluators."""
 
-from typing import Callable, Dict, List, Type
+from typing import Dict, List, Type
 from src.config import EvaluationConfig, default_config
 from src.evaluators.base import BaseRule, BaseEvaluator
 from src.evaluators.chain import EvaluationHandler, DeterministicRuleHandler, LLMJudgeHandler
 from src.evaluators.strategies import IEvaluationStrategy, TieredHybridStrategy, DeterministicOnlyStrategy
+
+
+class RuleRegistrationDecorator:
+    """Callable class-based decorator for registering rules."""
+
+    def __init__(self, registry: Dict[str, Type[BaseRule]], rule_id: str):
+        self.registry = registry
+        self.rule_id = rule_id
+
+    def __call__(self, subclass: Type[BaseRule]) -> Type[BaseRule]:
+        self.registry[self.rule_id] = subclass
+        return subclass
 
 
 class RuleRegistry:
@@ -13,11 +25,8 @@ class RuleRegistry:
     _registry: Dict[str, Type[BaseRule]] = {}
 
     @classmethod
-    def register(cls, rule_id: str) -> Callable[[Type[BaseRule]], Type[BaseRule]]:
-        def decorator(subclass: Type[BaseRule]) -> Type[BaseRule]:
-            cls._registry[rule_id] = subclass
-            return subclass
-        return decorator
+    def register(cls, rule_id: str) -> RuleRegistrationDecorator:
+        return RuleRegistrationDecorator(cls._registry, rule_id)
 
     @classmethod
     def get_all_rules(cls, config: EvaluationConfig = default_config) -> List[BaseRule]:

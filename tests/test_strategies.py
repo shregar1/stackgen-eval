@@ -9,22 +9,24 @@ from src.evaluators.strategies import TieredHybridStrategy, DeterministicOnlyStr
 from src.models import EvalVerdict, EvaluatorType
 
 
-def test_tiered_hybrid_strategy():
-    strategy = TieredHybridStrategy()
-    chain = EvaluatorFactory.create_chain(DeterministicEvaluatorEngine(), LLMJudgeEngine())
+class TestEvaluationStrategies:
+    """Class-based test suite for evaluation execution strategies."""
 
-    # Trace 2 reaches LLM Judge in hybrid
-    trace_2 = TraceBuilder(2).with_reply("Relying on March 4").build()
-    res = strategy.evaluate(trace_2, chain)
-    assert res.evaluator_type == EvaluatorType.LLM_JUDGE
+    def test_tiered_hybrid_strategy(self):
+        strategy = TieredHybridStrategy()
+        chain = EvaluatorFactory.create_chain(DeterministicEvaluatorEngine(), LLMJudgeEngine())
 
+        # Trace 2 reaches LLM Judge in hybrid
+        trace_2 = TraceBuilder(2).with_reply("Relying on March 4").build()
+        res = strategy.evaluate(trace_2, chain)
+        assert res.evaluator_type == EvaluatorType.LLM_JUDGE
 
-def test_deterministic_only_strategy():
-    strategy = DeterministicOnlyStrategy()
-    chain = EvaluatorFactory.create_chain(DeterministicEvaluatorEngine(), LLMJudgeEngine())
+    def test_deterministic_only_strategy(self):
+        strategy = DeterministicOnlyStrategy()
+        chain = EvaluatorFactory.create_chain(DeterministicEvaluatorEngine(), LLMJudgeEngine())
 
-    # Trace 2 is not flagged deterministically, so deterministic_only strategy returns PASS
-    trace_2 = TraceBuilder(2).with_reply("Relying on March 4").build()
-    res = strategy.evaluate(trace_2, chain)
-    assert res.evaluator_type == EvaluatorType.DETERMINISTIC
-    assert res.result == EvalVerdict.PASS
+        # Trace 2 is not flagged deterministically, so deterministic_only strategy returns PASS
+        trace_2 = TraceBuilder(2).with_reply("Relying on March 4").build()
+        res = strategy.evaluate(trace_2, chain)
+        assert res.evaluator_type == EvaluatorType.DETERMINISTIC
+        assert res.result == EvalVerdict.PASS

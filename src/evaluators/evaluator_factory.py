@@ -15,11 +15,18 @@ class EvaluatorFactory:
     @staticmethod
     def create_chain(
         deterministic_engine: BaseEvaluator,
-        llm_judge_engine: BaseEvaluator
+        llm_judge_engine: BaseEvaluator,
+        enable_cache: bool = True
     ) -> EvaluationHandler:
-        """Construct the Chain of Responsibility."""
+        """Construct the Chain of Responsibility, decorated with caching."""
         det_handler = DeterministicRuleHandler(deterministic_engine)
-        judge_handler = LLMJudgeHandler(llm_judge_engine)
+        
+        target_judge = llm_judge_engine
+        if enable_cache:
+            from src.decorators.cached_evaluator_decorator import CachedEvaluatorDecorator
+            target_judge = CachedEvaluatorDecorator(llm_judge_engine)
+
+        judge_handler = LLMJudgeHandler(target_judge)
         det_handler.set_next(judge_handler)
         return det_handler
 

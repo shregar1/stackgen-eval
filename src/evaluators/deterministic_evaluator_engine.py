@@ -3,7 +3,7 @@
 from typing import List, Optional
 from src.config import EvaluationConfig, default_config
 from src.evaluators.base_rule import BaseRule
-from src.evaluators.base_evaluator import BaseEvaluator
+from src.templates.abstract_evaluation_template import AbstractEvaluationTemplate
 from src.evaluators.rules.entity_hallucination_rule import EntityHallucinationRule
 from src.evaluators.rules.unconfirmed_action_rule import UnconfirmedActionRule
 from src.evaluators.rules.tool_error_masking_rule import ToolErrorMaskingRule
@@ -12,10 +12,11 @@ from src.models.trace import Trace
 from src.models.trace_evaluation import TraceEvaluation
 
 
-class DeterministicEvaluatorEngine(BaseEvaluator):
+class DeterministicEvaluatorEngine(AbstractEvaluationTemplate):
     """
     Production-grade rule orchestrator running deterministic checks.
-    Uses RuleRegistry to auto-discover and execute rules.
+    Inherits from AbstractEvaluationTemplate (Template Method Pattern)
+    to ensure invariant input validation, lifecycle hooks, and verdict normalization.
     """
 
     def __init__(self, config: EvaluationConfig = default_config, rules: Optional[List[BaseRule]] = None):
@@ -27,8 +28,8 @@ class DeterministicEvaluatorEngine(BaseEvaluator):
             ConfidentialityLeakRule(config)
         ]
 
-    def evaluate(self, trace: Trace) -> Optional[TraceEvaluation]:
-        """Execute all configured rules against the trace."""
+    def _do_evaluate(self, trace: Trace) -> Optional[TraceEvaluation]:
+        """Primitive step executed by Template Method."""
         for rule in self.rules:
             violation = rule.check(trace)
             if violation is not None:

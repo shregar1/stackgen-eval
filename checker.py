@@ -50,9 +50,9 @@ class EvaluationCLI:
         parser.add_argument(
             "--format",
             type=str,
-            choices=["json", "markdown", "summary"],
+            choices=["json", "markdown", "summary", "junit", "audit"],
             default="json",
-            help="Output format"
+            help="Output format (json, markdown, summary, junit [Visitor], audit [Visitor])"
         )
         parser.add_argument(
             "--mode",
@@ -102,6 +102,18 @@ class EvaluationCLI:
             output_text = MarkdownReporter.render(batch_result)
         elif args.format == "summary":
             output_text = GitHubActionsReporter.render_summary(batch_result)
+        elif args.format == "junit":
+            # Visitor Pattern: Export JUnit XML
+            from src.visitors.junit_xml_visitor import JUnitXMLVisitor
+            junit_visitor = JUnitXMLVisitor()
+            batch_result.accept(junit_visitor)
+            output_text = junit_visitor.get_output()
+        elif args.format == "audit":
+            # Visitor Pattern: Export Audit Trail Markdown
+            from src.visitors.audit_trail_visitor import AuditTrailVisitor
+            audit_visitor = AuditTrailVisitor()
+            batch_result.accept(audit_visitor)
+            output_text = audit_visitor.get_output()
         else:
             output_text = JSONReporter.render(batch_result)
 

@@ -46,11 +46,21 @@ class EvaluationPipeline:
         self.metrics_collector = MetricsCollectorObserver()
         self.event_bus.subscribe(self.metrics_collector)
 
+        # Memento Pattern: State snapshot caretaker for rollback and audit
+        from src.memento.trace_caretaker import TraceCaretaker
+        from src.memento.trace_originator import TraceOriginator
+        self.caretaker = TraceCaretaker()
+
     def evaluate_trace(self, trace: Trace) -> TraceEvaluation:
         """
         Evaluate a single trace through Strategy and Handler Chain,
-        publishing lifecycle events.
+        checkpointing memento and publishing lifecycle events.
         """
+        # Memento checkpoint before execution
+        from src.memento.trace_originator import TraceOriginator
+        originator = TraceOriginator(trace)
+        self.caretaker.save_checkpoint(f"trace_{trace.trace_id}_pre_eval", originator.create_memento("pre_eval"))
+
         start = time.perf_counter()
         self.event_bus.notify_trace_start(trace)
 

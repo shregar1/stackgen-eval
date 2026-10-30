@@ -9,9 +9,10 @@ from src.models.trace_evaluation import TraceEvaluation
 from src.models.evaluator_type import EvaluatorType
 from src.models.eval_verdict import EvalVerdict
 from src.models.release_blocker_category import ReleaseBlockerCategory
-from src.evaluators.base_evaluator import BaseEvaluator
+from src.templates.abstract_evaluation_template import AbstractEvaluationTemplate
 from src.adapters.i_llm_provider_adapter import ILLMProviderAdapter
 from src.adapters.llm_provider_factory import LLMProviderFactory
+from src.proxies.secure_llm_provider_proxy import SecureLLMProviderProxy
 from src.resilience.circuit_breaker import CircuitBreaker
 
 logger = logging.getLogger(__name__)
@@ -54,22 +55,32 @@ Output your evaluation strictly formatted as JSON according to the schema.
 """
 
 
-class LLMJudgeEngine(BaseEvaluator):
+class LLMJudgeEngine(AbstractEvaluationTemplate):
     """
-    LLM-as-a-Judge Engine utilizing the Adapter Pattern for model backends
-    and the Circuit Breaker Pattern for fault tolerance.
+    LLM-as-a-Judge Engine utilizing:
+    - Template Method Pattern: Invariant lifecycle, validation, and post-normalization
+    - Proxy Pattern: Enterprise DLP & token anonymization vault
+    - Adapter Pattern: Multi-provider model backends (OpenAI / Anthropic / Mock)
+    - Circuit Breaker Pattern: Outage detection and fail-fast resilience
     """
 
     def __init__(
         self,
         config: EvaluationConfig = default_config,
         adapter: Optional[ILLMProviderAdapter] = None,
-        circuit_breaker: Optional[CircuitBreaker] = None
+        circuit_breaker: Optional[CircuitBreaker] = None,
+        enable_dlp_proxy: bool = True
     ):
         self.config = config
         self.system_prompt = SYSTEM_PROMPT
         self.user_prompt_template = USER_PROMPT_TEMPLATE
-        self.adapter = adapter or LLMProviderFactory.create(config)
+
+        base_adapter = adapter or LLMProviderFactory.create(config)
+        if enable_dlp_proxy and not isinstance(base_adapter, SecureLLMProviderProxy):
+            self.adapter: ILLMProviderAdapter = SecureLLMProviderProxy(base_adapter)
+        else:
+            self.adapter = base_adapter
+
         self.circuit_breaker = circuit_breaker or CircuitBreaker()
 
     def format_prompt(self, trace: Trace) -> str:
@@ -82,11 +93,11 @@ class LLMJudgeEngine(BaseEvaluator):
             reply=trace.reply
         )
 
-    def evaluate(self, trace: Trace) -> TraceEvaluation:
-        """Evaluate trace through Circuit Breaker and configured Provider Adapter."""
+    def _do_evaluate(self, trace: Trace) -> TraceEvaluation:
+        """Primitive evaluation step executed by AbstractEvaluationTemplate."""
         prompt = self.format_prompt(trace)
 
-        # Execute through circuit breaker
+        # Execute through circuit breaker and DLP proxy adapter
         try:
             parsed = self.circuit_breaker.call(
                 self.adapter.generate_evaluation,

@@ -20,7 +20,7 @@ class AbstractEvaluationTemplate(BaseEvaluator):
     5. Post-evaluation telemetry & audit emission
     """
 
-    def evaluate(self, trace: Trace) -> TraceEvaluation:
+    def evaluate(self, trace: Trace) -> Optional[TraceEvaluation]:
         """The Template Method defining the invariant algorithm skeleton."""
         self._validate_trace(trace)
         sanitized = self._pre_evaluate_hook(trace)
@@ -43,18 +43,20 @@ class AbstractEvaluationTemplate(BaseEvaluator):
         return trace
 
     @abc.abstractmethod
-    def _do_evaluate(self, trace: Trace) -> TraceEvaluation:
+    def _do_evaluate(self, trace: Trace) -> Optional[TraceEvaluation]:
         """Primitive operation: primitive step that subclasses MUST implement."""
         pass
 
-    def _normalize_verdict(self, trace: Trace, evaluation: TraceEvaluation) -> TraceEvaluation:
+    def _normalize_verdict(self, trace: Trace, evaluation: Optional[TraceEvaluation]) -> Optional[TraceEvaluation]:
         """Invariant step: enforces policy consistency (e.g. PASS cannot have release blockers)."""
+        if evaluation is None:
+            return None
         if evaluation.result == EvalVerdict.PASS:
             if evaluation.is_release_blocker:
                 evaluation.is_release_blocker = False
                 evaluation.release_blocker_category = ReleaseBlockerCategory.NONE
         return evaluation
 
-    def _post_evaluate_hook(self, trace: Trace, evaluation: TraceEvaluation, elapsed_ms: float) -> None:
+    def _post_evaluate_hook(self, trace: Trace, evaluation: Optional[TraceEvaluation], elapsed_ms: float) -> None:
         """Hook step: overrideable telemetry/metrics collection."""
         pass

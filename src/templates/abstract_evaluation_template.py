@@ -39,8 +39,9 @@ class AbstractEvaluationTemplate(BaseEvaluator):
             raise ValueError(f"Invalid trace_id: {trace.trace_id}. Must be positive integer.")
 
     def _pre_evaluate_hook(self, trace: Trace) -> Trace:
-        """Hook step: overrideable pre-flight transformation (default identity)."""
-        return trace
+        """Hook step: overrideable pre-flight transformation (enforces OWASP LLM04 payload bounds)."""
+        from src.security.payload_bounds_guard import PayloadBoundsGuard
+        return PayloadBoundsGuard().sanitize_trace(trace)
 
     @abc.abstractmethod
     def _do_evaluate(self, trace: Trace) -> Optional[TraceEvaluation]:

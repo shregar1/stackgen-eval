@@ -2,7 +2,7 @@
 
 A production-grade, tiered hybrid evaluation pipeline and scoring framework for autonomous workplace AI agents (Linear, GitHub, Slack, Datadog/CloudWatch metrics, application logs).
 
-Built with an uncompromising **100% Class-Based, One-Class-Per-File** architecture implementing **14 Enterprise & GoF Design Patterns** with high-throughput concurrency optimizations.
+Built with an uncompromising **100% Class-Based, One-Class-Per-File** architecture implementing **14 Enterprise & GoF Design Patterns**, high-throughput concurrency optimizations, and native **OWASP Top 10 for LLMs security guards**.
 
 ---
 
@@ -18,6 +18,11 @@ python3 checker.py
 python3 checker.py --concurrency 4
 ```
 
+### Cryptographic Tamper-Proof Audit Signatures
+```bash
+python3 checker.py --sign
+```
+
 ### Executive Markdown Summary Table
 ```bash
 python3 checker.py --format markdown
@@ -28,11 +33,11 @@ python3 checker.py --format markdown
 # Export standard JUnit XML for Jenkins / GitHub Actions / GitLab CI test tabs:
 python3 checker.py --format junit
 
-# Export legal compliance audit trail:
-python3 checker.py --format audit
+# Export legal compliance audit trail with tamper-proof signature:
+python3 checker.py --format audit --sign
 ```
 
-### Run Full Test Suite (65 Tests across all 14 Patterns & Optimizations)
+### Run Full Test Suite (75 Tests across all 14 Patterns & Security Guards)
 ```bash
 pytest -v
 # or using Makefile:
@@ -51,19 +56,20 @@ python3 checker.py --traces data/counterfactual_traces.json --format markdown
 
 ---
 
-## 2. Architecture: Tiered Hybrid Evaluation
+## 2. Architecture: Tiered Hybrid Evaluation with OWASP Defense
 
 ```
                [Trace Input: traces.json]
                             │
                             ▼
     ┌────────────────────────────────────────────────────────┐
-    │  STAGE 1: Deterministic Engine (Sub-ms, $0 Cost)       │
+    │  STAGE 1: Deterministic Engine & Security Bounds       │
     │  ----------------------------------------------------  │
     │  • RB-1: Unconfirmed Side-Effects (slack_send bypass)  │
     │  • RB-2: Confidentiality / PII Exfiltration            │
     │  • RB-3: Masked Tool Failure (Timeout treated as clean)│
     │  • RB-4: Hallucinated Primary Entities (Ticket regex)  │
+    │  • PayloadBoundsGuard: OWASP LLM04 ReDoS & size ceiling│
     │  • Flyweight precompiled regex cache memoization       │
     └────────────────────────────────────────────────────────┘
                             │
@@ -71,11 +77,12 @@ python3 checker.py --traces data/counterfactual_traces.json --format markdown
                             │
                             ▼
     ┌────────────────────────────────────────────────────────┐
-    │  STAGE 2: LLM Judge Engine with Full Resilience       │
+    │  STAGE 2: LLM Judge Engine & Adversarial Defense       │
     │  ----------------------------------------------------  │
+    │  • AdversarialPromptArmor: OWASP LLM01 delimiter nonce │
     │  • Circuit Breaker (CLOSED / OPEN / HALF-OPEN)         │
     │  • Token Bucket Rate Limiter (RPM & burst control)     │
-    │  • Secure DLP Proxy (PII/Token Anonymization Vault)    │
+    │  • Secure DLP Proxy: OWASP LLM06 AWS/JWT/PAT Redactor  │
     │  • Multi-Provider LLM Adapters (OpenAI/Anthropic/Mock) │
     │  • Temporal Superseding Resolution (June 12 vs Mar 4)  │
     │  • Incident Telemetry & Root Cause Attribution (RB-5)  │
@@ -84,7 +91,7 @@ python3 checker.py --traces data/counterfactual_traces.json --format markdown
     └────────────────────────────────────────────────────────┘
                             │
                             ▼
-   [JSON Reporter / JUnit XML / Audit Trail / Parallel Gate]
+   [JSON Reporter / JUnit XML / Audit Trail / HMAC-SHA256 Gate]
 ```
 
 ---
@@ -110,21 +117,26 @@ python3 checker.py --traces data/counterfactual_traces.json --format markdown
 
 ---
 
-## 4. Performance Optimizations
+## 4. Enterprise Security & OWASP LLM Defense
 
-1. **Parallel Worker Pool Concurrency**:
-   - `ConcurrentBatchEvaluationExecutor` evaluates traces concurrently via a thread pool with strict deterministic order preservation (`--concurrency 4`).
-2. **Token Bucket Rate Limiting**:
-   - `TokenBucketRateLimiter` prevents HTTP 429 quota exhaustion on frontier model APIs.
-3. **Flyweight Regex Memoization**:
-   - `FlyweightRegexRegistry` eliminates redundant `re.compile()` invocations and CPU allocations across rule runs.
+Located in `src/security/`:
+
+1. **OWASP LLM01: Adversarial Prompt Armor (`AdversarialPromptArmor`)**:
+   - Envelopes untrusted trace evidence inside cryptographically nonced XML tags (`<untrusted_evidence_{nonce}>`).
+   - Scans for meta-instruction injection patterns (`"ignore previous instructions"`, `"developer mode"`).
+2. **OWASP LLM06: High-Entropy Secret & Key Masker (`HighEntropySecretMasker`)**:
+   - Redacts AWS keys, GitHub PATs, Slack tokens, JWTs, and high-entropy secrets using regex signatures + Shannon entropy.
+3. **Cryptographic Tamper-Proof Audit Signatures (`CryptographicAuditLedger`)**:
+   - Computes deterministic HMAC-SHA256 signatures for evaluation batches (`--sign`) to guarantee supply chain integrity.
+4. **OWASP LLM04: Payload Bounding & ReDoS Defense (`PayloadBoundsGuard`)**:
+   - Enforces character ceilings (max 10,000 chars per field, max 25,000 chars per tool payload) with truncation markers.
 
 ---
 
 ## 5. Architectural Discipline: One Class Per File (AST Enforced)
 
 Every single Python component in `src/`, `tests/`, and `checker.py` follows strict OOP design:
-- **Exactly 1 class per file** (118 files total).
+- **Exactly 1 class per file** (128 files total).
 - **0 isolated / standalone functions** repository-wide.
 - Automated AST linting in CI verifies this structural invariant on every build.
 

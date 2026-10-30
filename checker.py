@@ -73,6 +73,11 @@ class EvaluationCLI:
             help="Number of concurrent worker threads for batch evaluation"
         )
         parser.add_argument(
+            "--sign",
+            action="store_true",
+            help="Generate cryptographic HMAC-SHA256 digital signature for the batch"
+        )
+        parser.add_argument(
             "--verbose",
             action="store_true",
             help="Enable detailed logging to stderr"
@@ -130,6 +135,11 @@ class EvaluationCLI:
             sys.stderr.write(f"Report written to {args.output}\n")
         else:
             print(output_text)
+
+        if args.sign:
+            from src.security.cryptographic_audit_ledger import CryptographicAuditLedger
+            sig = CryptographicAuditLedger().sign_batch(batch_result)
+            sys.stderr.write(f"[SECURITY AUDIT] HMAC-SHA256 Digital Signature: {sig}\n")
 
         if args.fail_on_blocker and batch_result.summary.total_release_blockers > 0:
             sys.stderr.write(

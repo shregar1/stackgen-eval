@@ -31,11 +31,13 @@ class AnonymizationVault:
         return FlyweightRegexRegistry.get_instance().get_pattern(rf"\b{re.escape(term)}\b", flags=re.IGNORECASE)
 
     def anonymize(self, text: str) -> str:
-        """Replace all sensitive entities with anonymized surrogate tokens."""
+        """Replace all sensitive entities and credentials with anonymized surrogate tokens."""
         if not text:
             return text
 
-        result = text
+        # 0. Mask high-entropy credentials & API tokens (OWASP LLM06)
+        from src.security.high_entropy_secret_masker import HighEntropySecretMasker
+        result = HighEntropySecretMasker().mask_secrets(text)
 
         # 1. Anonymize emails
         emails = self._get_email_pattern().findall(result)

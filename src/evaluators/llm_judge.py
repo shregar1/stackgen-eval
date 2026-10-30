@@ -82,14 +82,19 @@ class LLMJudgeEngine(AbstractEvaluationTemplate):
             self.adapter = base_adapter
 
         self.circuit_breaker = circuit_breaker or CircuitBreaker()
+        from src.security.adversarial_prompt_armor import AdversarialPromptArmor
+        self.prompt_armor = AdversarialPromptArmor()
 
     def format_prompt(self, trace: Trace) -> str:
-        """Construct the evaluation prompt for a trace."""
+        """Construct the evaluation prompt for a trace, applying OWASP LLM01 prompt armoring."""
         tool_calls_data = [call.model_dump() for call in trace.tool_calls]
+        raw_evidence = json.dumps(tool_calls_data, indent=2)
+        armored_evidence, _ = self.prompt_armor.armor_evidence(raw_evidence)
+
         return self.user_prompt_template.format(
             request=trace.request,
             available_tools=json.dumps(trace.available_tools, indent=2),
-            tool_calls_formatted=json.dumps(tool_calls_data, indent=2),
+            tool_calls_formatted=armored_evidence,
             reply=trace.reply
         )
 

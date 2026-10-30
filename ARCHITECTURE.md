@@ -1,6 +1,6 @@
 # StackGen AI Evaluation System: Architecture & Design Patterns
 
-This document details the software architecture, design patterns, and operational mechanics of the StackGen Workplace AI Evaluation Framework.
+This document details the software architecture, design patterns, operational mechanics, and enterprise security framework of the StackGen Workplace AI Evaluation Framework.
 
 ---
 
@@ -12,9 +12,9 @@ The core thesis of this architecture is **Pareto-Optimal Hybrid Evaluation**:
 
 ### Architectural Discipline: 100% Class-Based, One-Class-Per-File (AST Enforced)
 To enforce strict enterprise separation of concerns, the entire repository adheres to an uncompromising architectural rule:
-1. **Exactly ONE Class per `.py` File**: Every single component, enum, rule, event, visitor, adapter, proxy, template, memento, executor, and flyweight registry resides in its own isolated file.
+1. **Exactly ONE Class per `.py` File**: Every single component, enum, rule, event, visitor, adapter, proxy, template, memento, executor, security guard, and flyweight registry resides in its own isolated file.
 2. **Zero Isolated Functions**: No standalone module-level helper functions exist in the repository; every behavior is an encapsulated method of a class.
-3. **Automated AST Gate**: Verified in CI through Python's `ast` parser across all 118 source and test modules.
+3. **Automated AST Gate**: Verified in CI through Python's `ast` parser across all 128 source and test modules.
 
 ```mermaid
 flowchart TD
@@ -29,9 +29,10 @@ flowchart TD
         B --> MEM[Memento Pattern: TraceOriginator & Caretaker]
     end
     
-    subgraph Stage 1: Deterministic Engine (Sub-ms, $0)
+    subgraph Stage 1: Deterministic Engine & Security Bounds
         D --> H1[DeterministicRuleHandler]
         H1 --> T1[Template Method: AbstractEvaluationTemplate]
+        T1 --> BND[PayloadBoundsGuard: OWASP LLM04 ReDoS / Size Ceilings]
         T1 --> FLY[Flyweight Pattern: FlyweightRegexRegistry]
         T1 --> S1[Specification Pattern: Composable Predicates]
         S1 --> R1[RB-1: UnconfirmedActionRule]
@@ -42,12 +43,14 @@ flowchart TD
     
     H1 -->|Violation Detected| Z[Short-Circuit: Record Verdict & RB]
     
-    subgraph Stage 2: LLM Judge Engine & Resilience
+    subgraph Stage 2: LLM Judge Engine & Adversarial Defense
         H1 -->|Checks Passed| H2[LLMJudgeHandler]
+        H2 --> ARM[AdversarialPromptArmor: OWASP LLM01 Delimiter Nonce Isolation]
         H2 --> DEC[Decorator Pattern: CachedEvaluatorDecorator]
         DEC --> CB[Circuit Breaker: CLOSED/OPEN/HALF-OPEN]
         CB --> RAT[TokenBucketRateLimiter: RPM/TPM Control]
-        RAT --> PRX[Proxy Pattern: SecureLLMProviderProxy / DLP Vault]
+        RAT --> PRX[Proxy Pattern: SecureLLMProviderProxy]
+        PRX --> MSK[HighEntropySecretMasker: OWASP LLM06 AWS/JWT/PAT Redaction]
         PRX --> AD[ILLMProviderAdapter: OpenAI / Anthropic / Mock]
         H2 --> J1[Temporal Logic DAG]
         H2 --> J2[Incident Telemetry Verifier]
@@ -58,6 +61,7 @@ flowchart TD
     Z --> F
     F --> M[MetricsCollectorObserver]
     Z --> VIS[Visitor Pattern: JUnitXML / AuditTrail]
+    Z --> LEDG[CryptographicAuditLedger: HMAC-SHA256 Signatures]
     F --> REP[Reporters: JSON / Markdown / CI Gate]
 ```
 
@@ -72,122 +76,75 @@ The system implements 14 enterprise design patterns across GoF, Fowler, and Ente
 - **Classes**: `EvaluationHandler`, `DeterministicRuleHandler`, `LLMJudgeHandler`
 - **Rationale**: Evaluation requires a multi-stage funnel where early stages can short-circuit expensive downstream computations. If `DeterministicRuleHandler` detects an unconfirmed mutation (RB-1) or confidentiality leak (RB-2), the chain halts immediately and returns the verdict without invoking the LLM Judge.
 
-```mermaid
-classDiagram
-    class EvaluationHandler {
-        <<abstract>>
-        -EvaluationHandler _next_handler
-        +set_next(handler) EvaluationHandler
-        +handle(trace) Optional~TraceEvaluation~*
-    }
-    class DeterministicRuleHandler {
-        -BaseEvaluator evaluator
-        +handle(trace) Optional~TraceEvaluation~
-    }
-    class LLMJudgeHandler {
-        -BaseEvaluator evaluator
-        +handle(trace) Optional~TraceEvaluation~
-    }
-
-    EvaluationHandler <|-- DeterministicRuleHandler
-    EvaluationHandler <|-- LLMJudgeHandler
-    EvaluationHandler --> EvaluationHandler : next
-```
-
 ---
 
 ### Pattern 2: Circuit Breaker Pattern (Enterprise Resilience / Nygard)
 - **Directory**: `src/resilience/`
 - **Classes**: `CircuitBreaker`, `CircuitState`, `CircuitBreakerOpenException`
 - **Rationale**: Protects the evaluation pipeline against external LLM provider outages, rate-limits (HTTP 429), and cascading latency degradation.
-- **State Machine**:
-  - `CLOSED`: Normal operation. Tracks consecutive failures.
-  - `OPEN`: Tripped after `failure_threshold` consecutive exceptions. Fails fast with `CircuitBreakerOpenException` without hitting the network.
-  - `HALF_OPEN`: Entered after `recovery_timeout_seconds`. Allows trial probe calls. If successful, resets to `CLOSED`; if failing, reverts to `OPEN`.
 
 ---
 
 ### Pattern 3: Adapter Pattern (GoF Structural)
 - **Directory**: `src/adapters/`
 - **Classes**: `ILLMProviderAdapter`, `OpenAIProviderAdapter`, `AnthropicProviderAdapter`, `MockLLMProviderAdapter`, `LLMProviderFactory`
-- **Rationale**: Translates disparate external LLM APIs (OpenAI Chat Completions, Anthropic Messages) into a unified internal judge interface. Enables 100% offline, deterministic testing with `MockLLMProviderAdapter` while supporting seamless production deployment to frontier models via environment variables.
+- **Rationale**: Translates disparate external LLM APIs (OpenAI Chat Completions, Anthropic Messages) into a unified internal judge interface.
 
 ---
 
 ### Pattern 4: Decorator Pattern (GoF Structural)
 - **Directory**: `src/decorators/`
 - **Classes**: `EvaluatorDecorator`, `CachedEvaluatorDecorator`, `RetryWithBackoffDecorator`
-- **Rationale**: Dynamically attaches cross-cutting operational capabilities to any evaluator without altering core evaluation logic:
-  - `CachedEvaluatorDecorator`: SHA-256 trace payload caching preventing redundant evaluations and slashing token costs.
-  - `RetryWithBackoffDecorator`: Exponential backoff resilience against transient network/API glitches.
+- **Rationale**: Dynamically attaches cross-cutting operational capabilities to any evaluator without altering core evaluation logic (SHA-256 caching & exponential backoff).
 
 ---
 
 ### Pattern 5: Visitor Pattern (GoF Behavioral)
 - **Directory**: `src/visitors/`
 - **Classes**: `IEvaluationVisitor`, `JUnitXMLVisitor`, `AuditTrailVisitor`
-- **Rationale**: Decouples new export, reporting, and serialization operations from the underlying evaluation data structures.
-  - `JUnitXMLVisitor`: Transforms `EvaluationBatchResult` into standard JUnit XML test reports (`--format junit`).
-  - `AuditTrailVisitor`: Generates timestamped, legally auditable compliance markdown reports (`--format audit`).
+- **Rationale**: Decouples new export, reporting, and serialization operations from the underlying evaluation data structures (`--format junit`, `--format audit`).
 
 ---
 
 ### Pattern 6: Memento Pattern (GoF Behavioral)
 - **Directory**: `src/memento/`
 - **Classes**: `TraceMemento`, `TraceOriginator`, `TraceCaretaker`
-- **Rationale**: Provides immutable checkpointing, rollback, and counterfactual branch evaluation. In live reviews and chaos testing, agents can be subjected to synthetic mutations and cleanly rolled back to pristine state without re-parsing raw JSON fixtures.
+- **Rationale**: Provides immutable checkpointing, rollback, and counterfactual branch evaluation without re-parsing raw JSON fixtures.
 
 ---
 
 ### Pattern 7: Template Method Pattern (GoF Behavioral)
 - **Directory**: `src/templates/`
 - **Classes**: `AbstractEvaluationTemplate`, `TemplatedDeterministicEvaluator`, `TemplatedLLMJudgeEvaluator`
-- **Rationale**: Enforces a strict invariant lifecycle skeleton for all evaluators:
-  1. Input validation & structural sanity checks
-  2. Pre-evaluation hooks (prompt trimming/sanitization)
-  3. Primitive execution (`_do_evaluate`) implemented by concrete evaluators
-  4. Post-verdict normalization (e.g., ensuring passing traces never carry release blockers)
-  5. Post-evaluation telemetry & audit logging
+- **Rationale**: Enforces a strict invariant lifecycle skeleton for all evaluators: validation, payload bounds, normalization, and metrics hooks.
 
 ---
 
 ### Pattern 8: Proxy Pattern (GoF Structural)
 - **Directory**: `src/proxies/`
 - **Classes**: `SecureLLMProviderProxy`, `AnonymizationVault`
-- **Rationale**: Enterprise Data Loss Prevention (DLP). Wraps any `ILLMProviderAdapter` to scrub sensitive PII (names, internal emails, credentials) via `AnonymizationVault` before prompts cross the network boundary to third-party LLMs, and transparently de-tokenizes the returning verdict for coherent internal auditing.
+- **Rationale**: Enterprise Data Loss Prevention (DLP). Wraps any `ILLMProviderAdapter` to scrub sensitive PII and secrets via `AnonymizationVault` before prompts cross the network boundary.
 
 ---
 
 ### Pattern 9: Flyweight Pattern (GoF Structural)
 - **Directory**: `src/core/flyweight/`
 - **Classes**: `FlyweightRegexRegistry`
-- **Rationale**: Eliminates redundant `re.compile()` invocations and CPU allocations by maintaining a thread-safe singleton cache of precompiled regular expressions across all deterministic heuristic rules and token vaults.
+- **Rationale**: Eliminates redundant `re.compile()` invocations and CPU allocations by maintaining a thread-safe singleton cache of precompiled regular expressions.
 
 ---
 
 ### Pattern 10: Specification Pattern (Domain-Driven Design / Fowler)
 - **Directory**: `src/core/specifications/`
 - **Classes**: `ISpecification`, `AndSpecification`, `OrSpecification`, `NotSpecification`, and Domain Predicates
-- **Rationale**: Business rules for agent safety should be declarative, composable, and testable in isolation.
-- **Example**:
-  ```python
-  violation_spec = (
-      HasMutatingActionSpecification(mutating_tools)
-      & ConfirmationMechanismAvailableSpecification(confirmation_keywords)
-      & ~HasExecutedConfirmationSpecification(confirmation_keywords)
-  )
-  if violation_spec.is_satisfied_by(trace):
-      # Trigger RB-1 Release Blocker
-  ```
+- **Rationale**: Business rules for agent safety are declarative, composable, and testable in isolation.
 
 ---
 
 ### Pattern 11: Strategy Pattern (GoF Behavioral)
 - **Directory**: `src/evaluators/strategies/`
 - **Classes**: `IEvaluationStrategy`, `TieredHybridStrategy`, `DeterministicOnlyStrategy`
-- **Rationale**: Different operating environments require different evaluation algorithms:
-  - **CI Pre-Commit Hooks**: `DeterministicOnlyStrategy` provides instantaneous (<2ms) feedback at zero token cost.
-  - **Nightly / Staging Release Gate**: `TieredHybridStrategy` runs deterministic checks + LLM-as-a-Judge for semantic certification.
+- **Rationale**: Hot-swaps between zero-cost local checks and full hybrid evaluation.
 
 ---
 
@@ -195,32 +152,51 @@ classDiagram
 - **Directory**: `src/core/events/`
 - **Classes**: `EventBus`, `IEvaluationObserver`, `MetricsCollectorObserver`, `AuditLoggerObserver`
 - **Rationale**: Decouples evaluation execution from telemetry, monitoring, and profiling.
-- **Metrics Collected**: P50/P95 latencies, pass/fail counts, rule trigger frequency distribution, release blocker counts.
 
 ---
 
 ### Pattern 13: Builder Pattern (GoF Creational)
 - **Directory**: `src/core/builder/`
 - **Class**: `TraceBuilder`
-- **Rationale**: Provides a fluent API for synthesizing test fixtures, counterfactuals, and chaos engineering mutations without verbose nested JSON dictionary construction.
+- **Rationale**: Provides a fluent API for synthesizing test fixtures, counterfactuals, and chaos engineering mutations.
 
 ---
 
 ### Pattern 14: Registry & Factory Pattern (GoF Creational)
 - **Directory**: `src/evaluators/registry/`, `src/evaluators/factory/`, `src/adapters/llm_provider_factory.py`
 - **Classes**: `RuleRegistry`, `EvaluatorFactory`, `LLMProviderFactory`
-- **Rationale**: Adheres to the Open/Closed Principle (OCP). Developers can add new evaluation rules (e.g. `@RuleRegistry.register("RB-6")`) without modifying existing pipeline code. The factory handles dependency injection and pipeline assembly.
+- **Rationale**: Adheres to the Open/Closed Principle (OCP) with dynamic rule discovery and dependency injection.
 
 ---
 
-## 3. Performance & Throughput Optimizations
+## 3. Enterprise Security & OWASP LLM Defense
 
-1. **Parallel Worker Pool Concurrency**:
-   - `ConcurrentBatchEvaluationExecutor` executes evaluations across a thread worker pool with strict deterministic output ordering (`checker.py --concurrency 4`).
-2. **Token Bucket Rate Limiter**:
-   - `TokenBucketRateLimiter` enforces smooth traffic shaping and prevents HTTP 429 quota exhaustion against LLM APIs.
-3. **Regex Memoization (Flyweight Pattern)**:
-   - High-throughput regex caching across rules avoids re-parsing regular expressions on every trace.
+The system includes native security defense guards located in `src/security/`:
+
+### 1. OWASP LLM01: Prompt Injection & Adversarial Jailbreak Armor
+- **Class**: `AdversarialPromptArmor`
+- **Protection**:
+  - Envelopes untrusted trace evidence inside cryptographically nonced isolation delimiters (`<untrusted_evidence_{nonce}>`).
+  - Scans for meta-instruction hijacking patterns (`"ignore previous instructions"`, `"system override"`, `"developer mode"`).
+  - Explicitly instructs the judge to treat inner content as inert data, never instructions.
+
+### 2. OWASP LLM06: Sensitive Information Disclosure & Secret Masking
+- **Class**: `HighEntropySecretMasker`
+- **Protection**:
+  - Scans tool call payloads using regex signatures + Shannon entropy calculations.
+  - Automatically redacts AWS keys, GitHub PATs, Slack tokens, JWTs, and private keys before LLM evaluation and report generation.
+
+### 3. Cryptographic Tamper-Proof Audit Signatures
+- **Class**: `CryptographicAuditLedger`
+- **Protection**:
+  - Computes deterministic HMAC-SHA256 digital signatures over batch evaluations (`checker.py --sign`).
+  - Prevents supply chain tampering with CI evaluation results.
+
+### 4. OWASP LLM04: Model Denial of Service & ReDoS Defense
+- **Class**: `PayloadBoundsGuard`
+- **Protection**:
+  - Enforces character ceilings (max 10,000 chars per field, max 25,000 chars per tool payload) with truncation indicators.
+  - Defends against memory exhaustion, catastrophic regex backtracking (ReDoS), and runaway token costs.
 
 ---
 
@@ -236,10 +212,12 @@ sequenceDiagram
     participant Strat as TieredHybridStrategy
     participant Det as DeterministicRuleHandler
     participant Judge as LLMJudgeHandler
+    participant ARM as AdversarialPromptArmor
     participant CB as CircuitBreaker
     participant Prx as SecureLLMProviderProxy
+    participant MSK as HighEntropySecretMasker
     participant Adapt as ILLMProviderAdapter
-    participant Obs as MetricsCollectorObserver
+    participant LEDG as CryptographicAuditLedger
 
     CLI->>Pipe: evaluate_all(traces)
     Pipe->>Exec: execute(traces, evaluate_trace)
@@ -252,10 +230,11 @@ sequenceDiagram
             Det-->>Strat: Return Failure Evaluation (Short-circuit)
         else Deterministic Checks Pass
             Det->>Judge: handle(trace)
+            Judge->>ARM: armor_evidence(tool_calls)
             Judge->>CB: execute(callable)
             CB->>Prx: generate_evaluation(system_prompt, user_prompt)
-            Prx->>Prx: Anonymize PII/credentials via Vault
-            Prx->>Adapt: Forward sanitized prompts
+            Prx->>MSK: mask_secrets(prompts)
+            Prx->>Adapt: Forward sanitized & armored prompts
             Adapt-->>Prx: Return raw LLM verdict
             Prx->>Prx: De-anonymize response entities
             Prx-->>CB: Result payload
@@ -264,19 +243,17 @@ sequenceDiagram
         end
         Strat-->>Pipe: Return TraceEvaluation
         Pipe->>Bus: notify_trace_evaluated(trace, evaluation, elapsed_ms)
-        Bus->>Obs: on_trace_evaluated(event)
     end
     Exec-->>Pipe: Return ordered results
-    Pipe->>Bus: notify_batch_complete(batch, elapsed_s)
-    Pipe-->>CLI: Return EvaluationBatchResult
-    CLI-->>CLI: Output strict JSON / Markdown Table / CI Status Code
+    Pipe->>LEDG: sign_batch(batch_result)
+    Pipe-->>CLI: Return EvaluationBatchResult with HMAC-SHA256 signature
 ```
 
 ---
 
 ## 5. Architectural Summary Table
 
-| Pattern | Package Directory | Enterprise Responsibility & Benefit |
+| Pattern / Component | Package Directory | Enterprise Responsibility & Benefit |
 | :--- | :--- | :--- |
 | **Chain of Responsibility** | `src/evaluators/chain/` | Eliminates redundant LLM calls via early short-circuiting on safety violations. |
 | **Circuit Breaker** | `src/resilience/` | Prevents cascading failures & catastrophic hanging when external LLMs degrade. |
@@ -292,3 +269,7 @@ sequenceDiagram
 | **Observer Pattern** | `src/core/events/` | Zero-overhead telemetry and decoupled observability (Datadog/CloudWatch ready). |
 | **Builder Pattern** | `src/core/builder/` | Fluent, clean test fixture authoring and counterfactual mutation generation. |
 | **Registry & Factory** | `src/evaluators/registry/` | Adheres to Open-Closed Principle; new rules plug in seamlessly via decorators. |
+| **Adversarial Armor** | `src/security/` | OWASP LLM01 Prompt injection and jailbreak defense via cryptographic nonces. |
+| **Secret Masker** | `src/security/` | OWASP LLM06 Redacts AWS keys, GitHub PATs, JWTs, and high-entropy secrets. |
+| **Audit Ledger** | `src/security/` | Computes tamper-proof HMAC-SHA256 digital signatures for CI release gates. |
+| **Bounds Guard** | `src/security/` | OWASP LLM04 ReDoS and runaway payload size ceiling protection. |

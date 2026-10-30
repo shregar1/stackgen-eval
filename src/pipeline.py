@@ -1,28 +1,20 @@
-"""Pipeline orchestrator for hybrid agent evaluation.
-
-Integrates:
-- Factory Pattern: Creates handler chain and execution strategy
-- Chain of Responsibility: Dispatches trace through sequential, short-circuiting handlers
-- Strategy Pattern: Selects execution mode (TieredHybrid vs DeterministicOnly)
-- Observer Pattern: Publishes lifecycle events and collects performance metrics
-"""
+"""Pipeline orchestrator for hybrid agent evaluation."""
 
 import time
 import logging
 from typing import List, Optional
 from src.config import EvaluationConfig, default_config
-from src.models import (
-    Trace,
-    TraceEvaluation,
-    EvaluationSummary,
-    EvaluationBatchResult,
-    EvalVerdict,
-)
-from src.evaluators.deterministic import DeterministicEvaluatorEngine
+from src.models.trace import Trace
+from src.models.trace_evaluation import TraceEvaluation
+from src.models.evaluation_summary import EvaluationSummary
+from src.models.evaluation_batch_result import EvaluationBatchResult
+from src.models.eval_verdict import EvalVerdict
+from src.evaluators.deterministic_evaluator_engine import DeterministicEvaluatorEngine
 from src.evaluators.llm_judge import LLMJudgeEngine
-from src.evaluators.registry import EvaluatorFactory
-from src.evaluators.strategies import IEvaluationStrategy
-from src.core.events import EventBus, MetricsCollectorObserver
+from src.evaluators.evaluator_factory import EvaluatorFactory
+from src.evaluators.i_evaluation_strategy import IEvaluationStrategy
+from src.core.events.event_bus import EventBus
+from src.core.events.metrics_collector_observer import MetricsCollectorObserver
 
 logger = logging.getLogger(__name__)
 

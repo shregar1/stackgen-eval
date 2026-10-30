@@ -5,12 +5,11 @@ StackGen AI Evaluation Framework - Class-Based CLI Entry Point.
 Automated evaluation pipeline auditing workplace AI agents across:
 - Linear, GitHub, Slack, and monitoring telemetry (metrics & logs).
 
-All operations are strictly class-based with zero isolated functions.
+This module defines exactly one class: EvaluationCLI.
 """
 
 import os
 import sys
-import json
 import logging
 import argparse
 from typing import List, Optional
@@ -19,31 +18,11 @@ from typing import List, Optional
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from src.config import EvaluationConfig
-from src.models import Trace
+from src.core.loaders.trace_loader import TraceLoader
 from src.pipeline import EvaluationPipeline
-from src.reporters import JSONReporter, MarkdownReporter, GitHubActionsReporter
-
-
-class TraceLoader:
-    """Encapsulates loading and validation of machine-readable trace datasets."""
-
-    @classmethod
-    def load(cls, path: str) -> List[Trace]:
-        """Load and validate traces from JSON file."""
-        if not os.path.isabs(path):
-            base_dir = os.path.dirname(os.path.abspath(__file__))
-            path = os.path.join(base_dir, path)
-
-        if not os.path.exists(path):
-            raise FileNotFoundError(f"Traces file not found: {path}")
-
-        with open(path, "r", encoding="utf-8") as f:
-            raw_data = json.load(f)
-
-        if not isinstance(raw_data, list):
-            raise ValueError("Traces JSON file must contain a top-level array of trace objects.")
-
-        return [Trace.model_validate(t) for t in raw_data]
+from src.reporters.json_reporter import JSONReporter
+from src.reporters.markdown_reporter import MarkdownReporter
+from src.reporters.github_actions_reporter import GitHubActionsReporter
 
 
 class EvaluationCLI:
@@ -146,11 +125,6 @@ class EvaluationCLI:
     def main(cls) -> None:
         """Program entrypoint invoking execute and sys.exit."""
         sys.exit(cls.execute())
-
-
-# Backward-compatibility alias for test runners or imports
-load_traces = TraceLoader.load
-main = EvaluationCLI.main
 
 
 if __name__ == "__main__":

@@ -2,9 +2,9 @@
 
 import pytest
 from src.core.builder import TraceBuilder
-from src.evaluators.deterministic import DeterministicEvaluatorEngine
+from src.evaluators.deterministic_evaluator_engine import DeterministicEvaluatorEngine
 from src.evaluators.llm_judge import LLMJudgeEngine
-from src.evaluators.registry import EvaluatorFactory
+from src.evaluators.evaluator_factory import EvaluatorFactory
 from src.models import EvalVerdict, EvaluatorType
 
 

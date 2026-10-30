@@ -1,8 +1,9 @@
-"""Abstract base classes for evaluators and deterministic rules."""
+"""Abstract base rule interface."""
 
 from abc import ABC, abstractmethod
 from typing import Optional
-from src.models import Trace, TraceEvaluation
+from src.models.trace import Trace
+from src.models.trace_evaluation import TraceEvaluation
 
 
 class BaseRule(ABC):
@@ -26,13 +27,4 @@ class BaseRule(ABC):
         Evaluate the trace against this specific rule.
         Returns a TraceEvaluation if a violation is detected, otherwise None.
         """
-        pass
-
-
-class BaseEvaluator(ABC):
-    """Abstract interface for high-level evaluators."""
-
-    @abstractmethod
-    def evaluate(self, trace: Trace) -> Optional[TraceEvaluation]:
-        """Execute evaluation on a trace."""
         pass

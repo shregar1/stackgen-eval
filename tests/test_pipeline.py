@@ -2,7 +2,7 @@
 
 import pytest
 from src.pipeline import EvaluationPipeline
-from checker import TraceLoader
+from src.core.loaders.trace_loader import TraceLoader
 from src.models import EvalVerdict
 
 

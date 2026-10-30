@@ -1,16 +1,6 @@
-"""Output formatting and reporting modules for evaluation results."""
+"""Markdown format reporter."""
 
-import json
-from typing import Any, Dict
-from src.models import EvaluationBatchResult
-
-
-class JSONReporter:
-    """Renders evaluation results matching the take-home specification format."""
-
-    @staticmethod
-    def render(batch: EvaluationBatchResult, indent: int = 2) -> str:
-        return json.dumps(batch.to_spec_dict(), indent=indent)
+from src.models.evaluation_batch_result import EvaluationBatchResult
 
 
 class MarkdownReporter:
@@ -38,14 +28,3 @@ class MarkdownReporter:
             )
 
         return "\n".join(lines)
-
-
-class GitHubActionsReporter:
-    """Renders workflow step summary and warning annotations for CI/CD pipelines."""
-
-    @staticmethod
-    def render_summary(batch: EvaluationBatchResult) -> str:
-        summary_md = MarkdownReporter.render(batch)
-        if batch.summary.total_release_blockers > 0:
-            summary_md += f"\n\n> [!CAUTION]\n> Deployment Blocked: {batch.summary.total_release_blockers} release blocker(s) detected in candidate model."
-        return summary_md

@@ -2,10 +2,11 @@
 
 import pytest
 from src.core.builder import TraceBuilder
-from src.evaluators.deterministic import DeterministicEvaluatorEngine
+from src.evaluators.deterministic_evaluator_engine import DeterministicEvaluatorEngine
 from src.evaluators.llm_judge import LLMJudgeEngine
-from src.evaluators.registry import EvaluatorFactory
-from src.evaluators.strategies import TieredHybridStrategy, DeterministicOnlyStrategy
+from src.evaluators.evaluator_factory import EvaluatorFactory
+from src.evaluators.tiered_hybrid_strategy import TieredHybridStrategy
+from src.evaluators.deterministic_only_strategy import DeterministicOnlyStrategy
 from src.models import EvalVerdict, EvaluatorType
 
 

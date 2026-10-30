@@ -13,7 +13,7 @@ from src.models import (
     EvalVerdict,
     ReleaseBlockerCategory,
 )
-from src.evaluators.base import BaseEvaluator
+from src.evaluators.base_evaluator import BaseEvaluator
 
 logger = logging.getLogger(__name__)
 

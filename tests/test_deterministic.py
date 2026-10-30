@@ -2,13 +2,11 @@
 
 import pytest
 from src.models import Trace, ToolCall, EvalVerdict, ReleaseBlockerCategory
-from src.evaluators.deterministic import (
-    UnconfirmedActionRule,
-    ConfidentialityLeakRule,
-    ToolErrorMaskingRule,
-    EntityHallucinationRule,
-    DeterministicEvaluatorEngine
-)
+from src.evaluators.rules.unconfirmed_action_rule import UnconfirmedActionRule
+from src.evaluators.rules.confidentiality_leak_rule import ConfidentialityLeakRule
+from src.evaluators.rules.tool_error_masking_rule import ToolErrorMaskingRule
+from src.evaluators.rules.entity_hallucination_rule import EntityHallucinationRule
+from src.evaluators.deterministic_evaluator_engine import DeterministicEvaluatorEngine
 
 
 class TestDeterministicRules:

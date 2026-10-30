@@ -67,6 +67,12 @@ class EvaluationCLI:
             help="Exit with return code 1 if any release blocker is encountered"
         )
         parser.add_argument(
+            "--concurrency",
+            type=int,
+            default=1,
+            help="Number of concurrent worker threads for batch evaluation"
+        )
+        parser.add_argument(
             "--verbose",
             action="store_true",
             help="Enable detailed logging to stderr"
@@ -84,7 +90,8 @@ class EvaluationCLI:
 
         config = EvaluationConfig(
             mode=args.mode,
-            fail_on_blocker=args.fail_on_blocker
+            fail_on_blocker=args.fail_on_blocker,
+            concurrency=args.concurrency
         )
 
         try:

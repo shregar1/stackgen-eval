@@ -33,7 +33,9 @@ class EntityHallucinationRule(BaseRule):
 
     def _extract_entities(self, data: Any) -> Set[str]:
         text = data if isinstance(data, str) else json.dumps(data)
-        matches = re.findall(self.config.ticket_regex, text)
+        from src.core.flyweight.flyweight_regex_registry import FlyweightRegexRegistry
+        pattern = FlyweightRegexRegistry.get_instance().get_pattern(self.config.ticket_regex)
+        matches = pattern.findall(text)
         return set(matches)
 
     def check(self, trace: Trace) -> Optional[TraceEvaluation]:

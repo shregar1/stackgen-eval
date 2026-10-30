@@ -51,6 +51,10 @@ class EvaluationPipeline:
         from src.memento.trace_originator import TraceOriginator
         self.caretaker = TraceCaretaker()
 
+        # Concurrency: Parallel worker pool executor
+        from src.core.concurrency.concurrent_batch_evaluation_executor import ConcurrentBatchEvaluationExecutor
+        self.executor = ConcurrentBatchEvaluationExecutor(max_workers=config.concurrency)
+
     def evaluate_trace(self, trace: Trace) -> TraceEvaluation:
         """
         Evaluate a single trace through Strategy and Handler Chain,
@@ -75,18 +79,12 @@ class EvaluationPipeline:
     def evaluate_all(self, traces: List[Trace]) -> EvaluationBatchResult:
         """Evaluate a batch of traces and compile aggregate statistics."""
         start_time = time.perf_counter()
-        results: List[TraceEvaluation] = []
 
-        total_blockers = 0
-        total_passes = 0
+        # Execute concurrently across worker pool with strict order preservation
+        results = self.executor.execute(traces, self.evaluate_trace)
 
-        for trace in traces:
-            res = self.evaluate_trace(trace)
-            results.append(res)
-            if res.is_release_blocker:
-                total_blockers += 1
-            if res.result == EvalVerdict.PASS:
-                total_passes += 1
+        total_blockers = sum(1 for res in results if res.is_release_blocker)
+        total_passes = sum(1 for res in results if res.result == EvalVerdict.PASS)
 
         total_elapsed_s = time.perf_counter() - start_time
         total_traces = len(traces)

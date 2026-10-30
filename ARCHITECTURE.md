@@ -12,15 +12,16 @@ The core thesis of this architecture is **Pareto-Optimal Hybrid Evaluation**:
 
 ### Architectural Discipline: 100% Class-Based, One-Class-Per-File (AST Enforced)
 To enforce strict enterprise separation of concerns, the entire repository adheres to an uncompromising architectural rule:
-1. **Exactly ONE Class per `.py` File**: Every single component, enum, rule, event, visitor, adapter, proxy, template, and memento resides in its own isolated file.
+1. **Exactly ONE Class per `.py` File**: Every single component, enum, rule, event, visitor, adapter, proxy, template, memento, executor, and flyweight registry resides in its own isolated file.
 2. **Zero Isolated Functions**: No standalone module-level helper functions exist in the repository; every behavior is an encapsulated method of a class.
-3. **Automated AST Gate**: Verified in CI through Python's `ast` parser across all 108 source and test modules.
+3. **Automated AST Gate**: Verified in CI through Python's `ast` parser across all 118 source and test modules.
 
 ```mermaid
 flowchart TD
     A[Trace Input: traces.json] --> B[EvaluationPipeline]
     
-    subgraph Pipeline Orchestration
+    subgraph Concurrency & Pipeline Orchestration
+        B --> CONC[ConcurrentBatchEvaluationExecutor: ThreadPoolExecutor]
         B --> C[EvaluatorFactory]
         C --> D[Chain of Responsibility]
         C --> E[Strategy Pattern: TieredHybrid]
@@ -31,6 +32,7 @@ flowchart TD
     subgraph Stage 1: Deterministic Engine (Sub-ms, $0)
         D --> H1[DeterministicRuleHandler]
         H1 --> T1[Template Method: AbstractEvaluationTemplate]
+        T1 --> FLY[Flyweight Pattern: FlyweightRegexRegistry]
         T1 --> S1[Specification Pattern: Composable Predicates]
         S1 --> R1[RB-1: UnconfirmedActionRule]
         S1 --> R2[RB-2: ConfidentialityLeakRule]
@@ -42,8 +44,10 @@ flowchart TD
     
     subgraph Stage 2: LLM Judge Engine & Resilience
         H1 -->|Checks Passed| H2[LLMJudgeHandler]
-        H2 --> CB[Circuit Breaker: CLOSED/OPEN/HALF-OPEN]
-        CB --> PRX[Proxy Pattern: SecureLLMProviderProxy / DLP Vault]
+        H2 --> DEC[Decorator Pattern: CachedEvaluatorDecorator]
+        DEC --> CB[Circuit Breaker: CLOSED/OPEN/HALF-OPEN]
+        CB --> RAT[TokenBucketRateLimiter: RPM/TPM Control]
+        RAT --> PRX[Proxy Pattern: SecureLLMProviderProxy / DLP Vault]
         PRX --> AD[ILLMProviderAdapter: OpenAI / Anthropic / Mock]
         H2 --> J1[Temporal Logic DAG]
         H2 --> J2[Incident Telemetry Verifier]
@@ -59,9 +63,9 @@ flowchart TD
 
 ---
 
-## 2. Comprehensive Catalog of Design Patterns (13 Implemented Patterns)
+## 2. Comprehensive Catalog of Design Patterns (14 Implemented Patterns)
 
-The system implements 13 enterprise design patterns across GoF, Fowler, and Enterprise Resilience catalogs:
+The system implements 14 enterprise design patterns across GoF, Fowler, and Enterprise Resilience catalogs:
 
 ### Pattern 1: Chain of Responsibility (GoF Behavioral)
 - **Directory**: `src/evaluators/chain/`
@@ -114,7 +118,7 @@ classDiagram
 - **Directory**: `src/decorators/`
 - **Classes**: `EvaluatorDecorator`, `CachedEvaluatorDecorator`, `RetryWithBackoffDecorator`
 - **Rationale**: Dynamically attaches cross-cutting operational capabilities to any evaluator without altering core evaluation logic:
-  - `CachedEvaluatorDecorator`: MD5-based trace payload caching preventing redundant evaluations and slashing token costs.
+  - `CachedEvaluatorDecorator`: SHA-256 trace payload caching preventing redundant evaluations and slashing token costs.
   - `RetryWithBackoffDecorator`: Exponential backoff resilience against transient network/API glitches.
 
 ---
@@ -123,15 +127,15 @@ classDiagram
 - **Directory**: `src/visitors/`
 - **Classes**: `IEvaluationVisitor`, `JUnitXMLVisitor`, `AuditTrailVisitor`
 - **Rationale**: Decouples new export, reporting, and serialization operations from the underlying evaluation data structures.
-  - `JUnitXMLVisitor`: Transforms `EvaluationBatchResult` into standard JUnit XML test reports for Jenkins, GitLab CI, and GitHub Actions test summary tabs.
-  - `AuditTrailVisitor`: Generates timestamped, legally auditable compliance markdown reports detailing every rule trigger and driving evidence fact.
+  - `JUnitXMLVisitor`: Transforms `EvaluationBatchResult` into standard JUnit XML test reports (`--format junit`).
+  - `AuditTrailVisitor`: Generates timestamped, legally auditable compliance markdown reports (`--format audit`).
 
 ---
 
 ### Pattern 6: Memento Pattern (GoF Behavioral)
 - **Directory**: `src/memento/`
 - **Classes**: `TraceMemento`, `TraceOriginator`, `TraceCaretaker`
-- **Rationale**: Provides immutable checkpointing, rollback, and counterfactual branch evaluation. In live reviews and chaos testing, agents can be subjected to synthetic mutations (e.g. injecting confirmation tools or redacting confidential fields) and then cleanly rolled back to pristine state without re-parsing raw JSON fixtures.
+- **Rationale**: Provides immutable checkpointing, rollback, and counterfactual branch evaluation. In live reviews and chaos testing, agents can be subjected to synthetic mutations and cleanly rolled back to pristine state without re-parsing raw JSON fixtures.
 
 ---
 
@@ -154,7 +158,14 @@ classDiagram
 
 ---
 
-### Pattern 9: Specification Pattern (Domain-Driven Design / Fowler)
+### Pattern 9: Flyweight Pattern (GoF Structural)
+- **Directory**: `src/core/flyweight/`
+- **Classes**: `FlyweightRegexRegistry`
+- **Rationale**: Eliminates redundant `re.compile()` invocations and CPU allocations by maintaining a thread-safe singleton cache of precompiled regular expressions across all deterministic heuristic rules and token vaults.
+
+---
+
+### Pattern 10: Specification Pattern (Domain-Driven Design / Fowler)
 - **Directory**: `src/core/specifications/`
 - **Classes**: `ISpecification`, `AndSpecification`, `OrSpecification`, `NotSpecification`, and Domain Predicates
 - **Rationale**: Business rules for agent safety should be declarative, composable, and testable in isolation.
@@ -171,7 +182,7 @@ classDiagram
 
 ---
 
-### Pattern 10: Strategy Pattern (GoF Behavioral)
+### Pattern 11: Strategy Pattern (GoF Behavioral)
 - **Directory**: `src/evaluators/strategies/`
 - **Classes**: `IEvaluationStrategy`, `TieredHybridStrategy`, `DeterministicOnlyStrategy`
 - **Rationale**: Different operating environments require different evaluation algorithms:
@@ -180,7 +191,7 @@ classDiagram
 
 ---
 
-### Pattern 11: Observer Pattern (GoF Behavioral)
+### Pattern 12: Observer Pattern (GoF Behavioral)
 - **Directory**: `src/core/events/`
 - **Classes**: `EventBus`, `IEvaluationObserver`, `MetricsCollectorObserver`, `AuditLoggerObserver`
 - **Rationale**: Decouples evaluation execution from telemetry, monitoring, and profiling.
@@ -188,27 +199,39 @@ classDiagram
 
 ---
 
-### Pattern 12: Builder Pattern (GoF Creational)
+### Pattern 13: Builder Pattern (GoF Creational)
 - **Directory**: `src/core/builder/`
 - **Class**: `TraceBuilder`
 - **Rationale**: Provides a fluent API for synthesizing test fixtures, counterfactuals, and chaos engineering mutations without verbose nested JSON dictionary construction.
 
 ---
 
-### Pattern 13: Registry & Factory Pattern (GoF Creational)
+### Pattern 14: Registry & Factory Pattern (GoF Creational)
 - **Directory**: `src/evaluators/registry/`, `src/evaluators/factory/`, `src/adapters/llm_provider_factory.py`
 - **Classes**: `RuleRegistry`, `EvaluatorFactory`, `LLMProviderFactory`
 - **Rationale**: Adheres to the Open/Closed Principle (OCP). Developers can add new evaluation rules (e.g. `@RuleRegistry.register("RB-6")`) without modifying existing pipeline code. The factory handles dependency injection and pipeline assembly.
 
 ---
 
-## 3. Sequence Diagram: Trace Evaluation Flow
+## 3. Performance & Throughput Optimizations
+
+1. **Parallel Worker Pool Concurrency**:
+   - `ConcurrentBatchEvaluationExecutor` executes evaluations across a thread worker pool with strict deterministic output ordering (`checker.py --concurrency 4`).
+2. **Token Bucket Rate Limiter**:
+   - `TokenBucketRateLimiter` enforces smooth traffic shaping and prevents HTTP 429 quota exhaustion against LLM APIs.
+3. **Regex Memoization (Flyweight Pattern)**:
+   - High-throughput regex caching across rules avoids re-parsing regular expressions on every trace.
+
+---
+
+## 4. Sequence Diagram: Trace Evaluation Flow
 
 ```mermaid
 sequenceDiagram
     autonumber
     participant CLI as checker.py
     participant Pipe as EvaluationPipeline
+    participant Exec as ConcurrentBatchEvaluationExecutor
     participant Bus as EventBus
     participant Strat as TieredHybridStrategy
     participant Det as DeterministicRuleHandler
@@ -219,7 +242,9 @@ sequenceDiagram
     participant Obs as MetricsCollectorObserver
 
     CLI->>Pipe: evaluate_all(traces)
-    loop For each Trace
+    Pipe->>Exec: execute(traces, evaluate_trace)
+    par For each trace concurrently
+        Exec->>Pipe: evaluate_trace(trace)
         Pipe->>Bus: notify_trace_start(trace)
         Pipe->>Strat: evaluate(trace, chain)
         Strat->>Det: handle(trace)
@@ -241,6 +266,7 @@ sequenceDiagram
         Pipe->>Bus: notify_trace_evaluated(trace, evaluation, elapsed_ms)
         Bus->>Obs: on_trace_evaluated(event)
     end
+    Exec-->>Pipe: Return ordered results
     Pipe->>Bus: notify_batch_complete(batch, elapsed_s)
     Pipe-->>CLI: Return EvaluationBatchResult
     CLI-->>CLI: Output strict JSON / Markdown Table / CI Status Code
@@ -248,7 +274,7 @@ sequenceDiagram
 
 ---
 
-## 4. Architectural Summary Table
+## 5. Architectural Summary Table
 
 | Pattern | Package Directory | Enterprise Responsibility & Benefit |
 | :--- | :--- | :--- |
@@ -260,6 +286,7 @@ sequenceDiagram
 | **Memento Pattern** | `src/memento/` | Provides snapshotting, rollback, and counterfactual simulation branching. |
 | **Template Method** | `src/templates/` | Standardizes pre-evaluation validation, normalization, and telemetry invariants. |
 | **Proxy Pattern** | `src/proxies/` | Intercepts prompts for Enterprise DLP, PII redaction, and token de-anonymization. |
+| **Flyweight Pattern** | `src/core/flyweight/` | Reuses immutable precompiled regular expressions across high-throughput loops. |
 | **Specification Pattern** | `src/core/specifications/` | Clean, composable Boolean logic for trace validation; highly unit-testable. |
 | **Strategy Pattern** | `src/evaluators/strategies/` | Allows switching between ultra-fast local checks and full hybrid evaluation. |
 | **Observer Pattern** | `src/core/events/` | Zero-overhead telemetry and decoupled observability (Datadog/CloudWatch ready). |

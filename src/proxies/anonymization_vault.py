@@ -16,13 +16,19 @@ class AnonymizationVault:
         self._reverse_map: Dict[str, str] = {}
         self._counter: int = 0
         self._custom_terms: List[str] = sensitive_terms or ["Jordan", "Sarah Chen", "Priya"]
-
-        # Default PII email pattern
-        self._email_pattern: Pattern = re.compile(r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+")
+        self._email_regex_str: str = r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+"
 
     @property
     def redactions_count(self) -> int:
         return len(self._forward_map)
+
+    def _get_email_pattern(self) -> Pattern:
+        from src.core.flyweight.flyweight_regex_registry import FlyweightRegexRegistry
+        return FlyweightRegexRegistry.get_instance().get_pattern(self._email_regex_str)
+
+    def _get_term_pattern(self, term: str) -> Pattern:
+        from src.core.flyweight.flyweight_regex_registry import FlyweightRegexRegistry
+        return FlyweightRegexRegistry.get_instance().get_pattern(rf"\b{re.escape(term)}\b", flags=re.IGNORECASE)
 
     def anonymize(self, text: str) -> str:
         """Replace all sensitive entities with anonymized surrogate tokens."""
@@ -32,7 +38,7 @@ class AnonymizationVault:
         result = text
 
         # 1. Anonymize emails
-        emails = self._email_pattern.findall(result)
+        emails = self._get_email_pattern().findall(result)
         for email in emails:
             if email not in self._forward_map:
                 self._counter += 1
@@ -43,13 +49,14 @@ class AnonymizationVault:
 
         # 2. Anonymize sensitive named terms
         for term in self._custom_terms:
-            if re.search(rf"\b{re.escape(term)}\b", result, flags=re.IGNORECASE):
+            pattern = self._get_term_pattern(term)
+            if pattern.search(result):
                 if term not in self._forward_map:
                     self._counter += 1
                     token = f"[ANONYMIZED_ENTITY_{self._counter}]"
                     self._forward_map[term] = token
                     self._reverse_map[token] = term
-                result = re.sub(rf"\b{re.escape(term)}\b", self._forward_map[term], result, flags=re.IGNORECASE)
+                result = pattern.sub(self._forward_map[term], result)
 
         return result
 

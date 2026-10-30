@@ -66,6 +66,8 @@ class EvaluationConfig(BaseModel):
     # Execution controls
     fail_on_blocker: bool = Field(default=False, description="Exit with code 1 if any release blocker is encountered.")
     mode: str = Field(default="hybrid", description="Execution mode: 'hybrid', 'deterministic_only', 'llm_only'.")
+    concurrency: int = Field(default=1, description="Number of concurrent worker threads for batch evaluation.")
+    rate_limit_rpm: int = Field(default=60, description="Max allowed requests per minute for rate limiting.")
 
 
 default_config = EvaluationConfig()

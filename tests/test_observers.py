@@ -71,6 +71,7 @@ class TestObserverPattern:
         # t1: Grounded ticket ENG-41 (non-blocker scope failure from LLM judge)
         t1 = (
             TraceBuilder(1)
+            .with_request("What is blocking the September release?")
             .with_tool_call("linear_search", result=[{"id": "ENG-41", "status": "open"}])
             .with_reply("Only ENG-41 blocks the release.")
             .build()

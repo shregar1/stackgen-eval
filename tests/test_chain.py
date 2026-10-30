@@ -40,6 +40,7 @@ class TestChainOfResponsibility:
         trace_2 = (
             TraceBuilder(2)
             .with_available_tools(["slack_search"])
+            .with_request("What did we decide about self-hosted runners?")
             .with_reply("The team decided to buy runners based on March 4.")
             .build()
         )

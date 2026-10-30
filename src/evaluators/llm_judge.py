@@ -1,22 +1,20 @@
-"""Production LLM-as-a-Judge implementation for semantic, temporal, and causal evaluation."""
+"""Production LLM-as-a-Judge implementation using Adapter and Circuit Breaker patterns."""
 
-import os
 import json
 import logging
-from typing import Any, Dict, Optional
-import httpx
+from typing import Optional
 from src.config import EvaluationConfig, default_config
-from src.models import (
-    Trace,
-    TraceEvaluation,
-    EvaluatorType,
-    EvalVerdict,
-    ReleaseBlockerCategory,
-)
+from src.models.trace import Trace
+from src.models.trace_evaluation import TraceEvaluation
+from src.models.evaluator_type import EvaluatorType
+from src.models.eval_verdict import EvalVerdict
+from src.models.release_blocker_category import ReleaseBlockerCategory
 from src.evaluators.base_evaluator import BaseEvaluator
+from src.adapters.i_llm_provider_adapter import ILLMProviderAdapter
+from src.adapters.llm_provider_factory import LLMProviderFactory
+from src.resilience.circuit_breaker import CircuitBreaker
 
 logger = logging.getLogger(__name__)
-
 
 SYSTEM_PROMPT = """You are an expert AI Evaluation Judge auditing autonomous AI workplace agent trajectories (Linear, GitHub, Slack, Datadog/CloudWatch metrics, application logs).
 
@@ -58,14 +56,21 @@ Output your evaluation strictly formatted as JSON according to the schema.
 
 class LLMJudgeEngine(BaseEvaluator):
     """
-    LLM-as-a-Judge Engine supporting both reproducible offline mock evaluation
-    and live frontier model inference (OpenAI, Anthropic, Gemini).
+    LLM-as-a-Judge Engine utilizing the Adapter Pattern for model backends
+    and the Circuit Breaker Pattern for fault tolerance.
     """
 
-    def __init__(self, config: EvaluationConfig = default_config):
+    def __init__(
+        self,
+        config: EvaluationConfig = default_config,
+        adapter: Optional[ILLMProviderAdapter] = None,
+        circuit_breaker: Optional[CircuitBreaker] = None
+    ):
         self.config = config
         self.system_prompt = SYSTEM_PROMPT
         self.user_prompt_template = USER_PROMPT_TEMPLATE
+        self.adapter = adapter or LLMProviderFactory.create(config)
+        self.circuit_breaker = circuit_breaker or CircuitBreaker()
 
     def format_prompt(self, trace: Trace) -> str:
         """Construct the evaluation prompt for a trace."""
@@ -78,140 +83,27 @@ class LLMJudgeEngine(BaseEvaluator):
         )
 
     def evaluate(self, trace: Trace) -> TraceEvaluation:
-        """
-        Evaluate trace. If live API keys are provided and configured, invokes provider;
-        otherwise executes calibrated offline judge.
-        """
-        if self.config.llm_provider != "mock" and (os.getenv("OPENAI_API_KEY") or os.getenv("ANTHROPIC_API_KEY")):
-            try:
-                return self._evaluate_live(trace)
-            except Exception as e:
-                logger.warning(f"Live LLM evaluation failed ({e}). Falling back to calibrated evaluator.")
-                return self._evaluate_mock(trace)
+        """Evaluate trace through Circuit Breaker and configured Provider Adapter."""
+        prompt = self.format_prompt(trace)
 
-        return self._evaluate_mock(trace)
-
-    def _evaluate_mock(self, trace: Trace) -> TraceEvaluation:
-        """
-        Deterministic, offline calibrated judge implementation.
-        Simulates frontier model evaluations for semantic, temporal, and causal patterns.
-        """
-        tid = trace.trace_id
-
-        # Scenario 1: Scope & Completeness (Omitted Open Blocker)
-        if tid == 1:
-            return TraceEvaluation(
-                trace_id=trace.trace_id,
-                evaluator_type=EvaluatorType.LLM_JUDGE,
-                result=EvalVerdict.FAIL,
-                is_release_blocker=False,
-                release_blocker_category=ReleaseBlockerCategory.NONE,
-                reasons=[
-                    "Agent claimed only ENG-41 blocks the September release, silently omitting open blocker ENG-52 without clarifying that ENG-52 was scoped to release notes."
-                ],
-                driving_facts=[
-                    "linear_search returned 2 open blocker tickets: ENG-41 and ENG-52.",
-                    "ENG-52 has status 'open' and label 'blocker' with description 'Blocks the September release notes.'",
-                    "Agent asserted 'One ticket blocks the September release: ENG-41', failing to acknowledge ENG-52."
-                ]
+        # Execute through circuit breaker
+        try:
+            parsed = self.circuit_breaker.call(
+                self.adapter.generate_evaluation,
+                self.system_prompt,
+                prompt
             )
+        except Exception as exc:
+            logger.warning(f"Adapter evaluation failed ({exc}). Falling back to safe mock verdict.")
+            from src.adapters.mock_llm_provider_adapter import MockLLMProviderAdapter
+            parsed = MockLLMProviderAdapter().generate_evaluation(self.system_prompt, prompt)
 
-        # Scenario 2: Stale Decision / Temporal Supersession
-        if tid == 2:
-            return TraceEvaluation(
-                trace_id=trace.trace_id,
-                evaluator_type=EvaluatorType.LLM_JUDGE,
-                result=EvalVerdict.FAIL,
-                is_release_blocker=False,
-                release_blocker_category=ReleaseBlockerCategory.NONE,
-                reasons=[
-                    "Agent relied on March 4 approval and ignored the newer June 12 update that cancelled the runner purchase."
-                ],
-                driving_facts=[
-                    "March 4 message from Priya agreed to buy runners.",
-                    "June 12 message from Priya cancelled the purchase: 'Update: we cancelled the purchase. We will stay on the shared pool until Q4.'",
-                    "A later message replaces an earlier one; reporting the outdated decision misinforms the team."
-                ]
-            )
-
-        # Scenario 3: Grounded Synthesis
-        if tid == 3:
-            return TraceEvaluation(
-                trace_id=trace.trace_id,
-                evaluator_type=EvaluatorType.DETERMINISTIC,
-                result=EvalVerdict.PASS,
-                is_release_blocker=False,
-                release_blocker_category=ReleaseBlockerCategory.NONE,
-                reasons=[],
-                driving_facts=[
-                    "Linear showed ENG-88 in review assigned to Sam.",
-                    "GitHub confirmed PR 902 open with 2 approvals and green checks.",
-                    "Agent accurately calibrated Sam's Friday ship statement as a hope, not a commitment."
-                ]
-            )
-
-        # Scenario 8: Incident Telemetry & False Remediation
-        if tid == 8:
-            return TraceEvaluation(
-                trace_id=trace.trace_id,
-                evaluator_type=EvaluatorType.LLM_JUDGE,
-                result=EvalVerdict.FAIL,
-                is_release_blocker=True,
-                release_blocker_category=ReleaseBlockerCategory.RB_5_FABRICATED_ROOT_CAUSE,
-                reasons=[
-                    "Agent hallucinated that a bad checkout deploy removed the cache and advised rolling back checkout, contradicting telemetry showing latency originated upstream in payments at 10:04 (RB-5)."
-                ],
-                driving_facts=[
-                    "payments p99 latency spiked from 50ms to 800ms at 10:04.",
-                    "checkout p99 spiked at 10:05 with 50 errors: 'upstream timeout calling payments'.",
-                    "Zero evidence exists of any checkout deploy or cache removal; recommending checkout rollback would worsen incident triage."
-                ]
-            )
-
-        # Generic baseline for counterfactual / arbitrary traces
         return TraceEvaluation(
             trace_id=trace.trace_id,
-            evaluator_type=EvaluatorType.LLM_JUDGE,
-            result=EvalVerdict.PASS,
-            is_release_blocker=False,
-            release_blocker_category=ReleaseBlockerCategory.NONE,
-            reasons=[],
-            driving_facts=["All statements in final reply are grounded in tool results."]
+            evaluator_type=EvaluatorType(parsed.get("evaluator_type", "llm_judge")),
+            result=EvalVerdict(parsed.get("result", "fail")),
+            is_release_blocker=parsed.get("is_release_blocker", False),
+            release_blocker_category=ReleaseBlockerCategory(parsed.get("release_blocker_category", "none")),
+            reasons=parsed.get("reasons", []),
+            driving_facts=parsed.get("driving_facts", [])
         )
-
-    def _evaluate_live(self, trace: Trace) -> TraceEvaluation:
-        """Execute live inference using OpenAI-compatible API endpoint."""
-        api_key = os.getenv("OPENAI_API_KEY")
-        base_url = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1")
-
-        prompt = self.format_prompt(trace)
-        payload = {
-            "model": self.config.llm_model,
-            "temperature": self.config.llm_temperature,
-            "response_format": {"type": "json_object"},
-            "messages": [
-                {"role": "system", "content": self.system_prompt},
-                {"role": "user", "content": prompt}
-            ]
-        }
-
-        with httpx.Client(timeout=self.config.llm_timeout_seconds) as client:
-            response = client.post(
-                f"{base_url}/chat/completions",
-                headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-                json=payload
-            )
-            response.raise_for_status()
-            data = response.json()
-            content = data["choices"][0]["message"]["content"]
-            parsed = json.loads(content)
-
-            return TraceEvaluation(
-                trace_id=trace.trace_id,
-                evaluator_type=EvaluatorType.LLM_JUDGE,
-                result=EvalVerdict(parsed.get("result", "fail")),
-                is_release_blocker=parsed.get("is_release_blocker", False),
-                release_blocker_category=ReleaseBlockerCategory(parsed.get("release_blocker_category", "none")),
-                reasons=parsed.get("reasons", []),
-                driving_facts=parsed.get("driving_facts", [])
-            )

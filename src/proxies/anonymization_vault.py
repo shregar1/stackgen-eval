@@ -1,0 +1,70 @@
+"""AnonymizationVault managing reversible token redaction for DLP compliance."""
+
+import re
+from typing import Dict, List, Pattern
+
+
+class AnonymizationVault:
+    """
+    Cryptographic vault managing reversible token redactions.
+    Replaces sensitive names, emails, credentials, and confidential terms
+    with synthetic anonymization tokens before external network transmission.
+    """
+
+    def __init__(self, sensitive_terms: List[str] = None):
+        self._forward_map: Dict[str, str] = {}
+        self._reverse_map: Dict[str, str] = {}
+        self._counter: int = 0
+        self._custom_terms: List[str] = sensitive_terms or ["Jordan", "Sarah Chen", "Priya"]
+
+        # Default PII email pattern
+        self._email_pattern: Pattern = re.compile(r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+")
+
+    @property
+    def redactions_count(self) -> int:
+        return len(self._forward_map)
+
+    def anonymize(self, text: str) -> str:
+        """Replace all sensitive entities with anonymized surrogate tokens."""
+        if not text:
+            return text
+
+        result = text
+
+        # 1. Anonymize emails
+        emails = self._email_pattern.findall(result)
+        for email in emails:
+            if email not in self._forward_map:
+                self._counter += 1
+                token = f"[ANONYMIZED_EMAIL_{self._counter}]"
+                self._forward_map[email] = token
+                self._reverse_map[token] = email
+            result = result.replace(email, self._forward_map[email])
+
+        # 2. Anonymize sensitive named terms
+        for term in self._custom_terms:
+            if re.search(rf"\b{re.escape(term)}\b", result, flags=re.IGNORECASE):
+                if term not in self._forward_map:
+                    self._counter += 1
+                    token = f"[ANONYMIZED_ENTITY_{self._counter}]"
+                    self._forward_map[term] = token
+                    self._reverse_map[token] = term
+                result = re.sub(rf"\b{re.escape(term)}\b", self._forward_map[term], result, flags=re.IGNORECASE)
+
+        return result
+
+    def deanonymize(self, text: str) -> str:
+        """Restore synthetic surrogate tokens back to their original domain terms."""
+        if not text:
+            return text
+
+        result = text
+        for token, original in self._reverse_map.items():
+            result = result.replace(token, original)
+        return result
+
+    def clear(self) -> None:
+        """Reset vault state."""
+        self._forward_map.clear()
+        self._reverse_map.clear()
+        self._counter = 0

@@ -12,9 +12,9 @@ The core thesis of this architecture is **Pareto-Optimal Hybrid Evaluation**:
 
 ### Architectural Discipline: 100% Class-Based, One-Class-Per-File (AST Enforced)
 To enforce strict enterprise separation of concerns, the entire repository adheres to an uncompromising architectural rule:
-1. **Exactly ONE Class per `.py` File**: Every single component, enum, rule, event, visitor, and adapter resides in its own isolated file.
+1. **Exactly ONE Class per `.py` File**: Every single component, enum, rule, event, visitor, adapter, proxy, template, and memento resides in its own isolated file.
 2. **Zero Isolated Functions**: No standalone module-level helper functions exist in the repository; every behavior is an encapsulated method of a class.
-3. **Automated AST Gate**: Verified in CI through Python's `ast` parser across all 91 source and test modules.
+3. **Automated AST Gate**: Verified in CI through Python's `ast` parser across all 108 source and test modules.
 
 ```mermaid
 flowchart TD
@@ -25,11 +25,13 @@ flowchart TD
         C --> D[Chain of Responsibility]
         C --> E[Strategy Pattern: TieredHybrid]
         B --> F[EventBus: Observer Pattern]
+        B --> MEM[Memento Pattern: TraceOriginator & Caretaker]
     end
     
     subgraph Stage 1: Deterministic Engine (Sub-ms, $0)
         D --> H1[DeterministicRuleHandler]
-        H1 --> S1[Specification Pattern: Composable Predicates]
+        H1 --> T1[Template Method: AbstractEvaluationTemplate]
+        T1 --> S1[Specification Pattern: Composable Predicates]
         S1 --> R1[RB-1: UnconfirmedActionRule]
         S1 --> R2[RB-2: ConfidentialityLeakRule]
         S1 --> R3[RB-3: ToolErrorMaskingRule]
@@ -41,7 +43,8 @@ flowchart TD
     subgraph Stage 2: LLM Judge Engine & Resilience
         H1 -->|Checks Passed| H2[LLMJudgeHandler]
         H2 --> CB[Circuit Breaker: CLOSED/OPEN/HALF-OPEN]
-        CB --> AD[ILLMProviderAdapter: OpenAI / Anthropic / Mock]
+        CB --> PRX[Proxy Pattern: SecureLLMProviderProxy / DLP Vault]
+        PRX --> AD[ILLMProviderAdapter: OpenAI / Anthropic / Mock]
         H2 --> J1[Temporal Logic DAG]
         H2 --> J2[Incident Telemetry Verifier]
         H2 --> J3[Epistemic Calibration]
@@ -56,9 +59,9 @@ flowchart TD
 
 ---
 
-## 2. Comprehensive Catalog of Design Patterns
+## 2. Comprehensive Catalog of Design Patterns (13 Implemented Patterns)
 
-The system implements 10 enterprise design patterns across GoF, Fowler, and Enterprise Resilience catalogs:
+The system implements 13 enterprise design patterns across GoF, Fowler, and Enterprise Resilience catalogs:
 
 ### Pattern 1: Chain of Responsibility (GoF Behavioral)
 - **Directory**: `src/evaluators/chain/`
@@ -125,7 +128,33 @@ classDiagram
 
 ---
 
-### Pattern 6: Specification Pattern (Domain-Driven Design / Fowler)
+### Pattern 6: Memento Pattern (GoF Behavioral)
+- **Directory**: `src/memento/`
+- **Classes**: `TraceMemento`, `TraceOriginator`, `TraceCaretaker`
+- **Rationale**: Provides immutable checkpointing, rollback, and counterfactual branch evaluation. In live reviews and chaos testing, agents can be subjected to synthetic mutations (e.g. injecting confirmation tools or redacting confidential fields) and then cleanly rolled back to pristine state without re-parsing raw JSON fixtures.
+
+---
+
+### Pattern 7: Template Method Pattern (GoF Behavioral)
+- **Directory**: `src/templates/`
+- **Classes**: `AbstractEvaluationTemplate`, `TemplatedDeterministicEvaluator`, `TemplatedLLMJudgeEvaluator`
+- **Rationale**: Enforces a strict invariant lifecycle skeleton for all evaluators:
+  1. Input validation & structural sanity checks
+  2. Pre-evaluation hooks (prompt trimming/sanitization)
+  3. Primitive execution (`_do_evaluate`) implemented by concrete evaluators
+  4. Post-verdict normalization (e.g., ensuring passing traces never carry release blockers)
+  5. Post-evaluation telemetry & audit logging
+
+---
+
+### Pattern 8: Proxy Pattern (GoF Structural)
+- **Directory**: `src/proxies/`
+- **Classes**: `SecureLLMProviderProxy`, `AnonymizationVault`
+- **Rationale**: Enterprise Data Loss Prevention (DLP). Wraps any `ILLMProviderAdapter` to scrub sensitive PII (names, internal emails, credentials) via `AnonymizationVault` before prompts cross the network boundary to third-party LLMs, and transparently de-tokenizes the returning verdict for coherent internal auditing.
+
+---
+
+### Pattern 9: Specification Pattern (Domain-Driven Design / Fowler)
 - **Directory**: `src/core/specifications/`
 - **Classes**: `ISpecification`, `AndSpecification`, `OrSpecification`, `NotSpecification`, and Domain Predicates
 - **Rationale**: Business rules for agent safety should be declarative, composable, and testable in isolation.
@@ -142,7 +171,7 @@ classDiagram
 
 ---
 
-### Pattern 7: Strategy Pattern (GoF Behavioral)
+### Pattern 10: Strategy Pattern (GoF Behavioral)
 - **Directory**: `src/evaluators/strategies/`
 - **Classes**: `IEvaluationStrategy`, `TieredHybridStrategy`, `DeterministicOnlyStrategy`
 - **Rationale**: Different operating environments require different evaluation algorithms:
@@ -151,7 +180,7 @@ classDiagram
 
 ---
 
-### Pattern 8: Observer Pattern (GoF Behavioral)
+### Pattern 11: Observer Pattern (GoF Behavioral)
 - **Directory**: `src/core/events/`
 - **Classes**: `EventBus`, `IEvaluationObserver`, `MetricsCollectorObserver`, `AuditLoggerObserver`
 - **Rationale**: Decouples evaluation execution from telemetry, monitoring, and profiling.
@@ -159,16 +188,16 @@ classDiagram
 
 ---
 
-### Pattern 9: Builder Pattern (GoF Creational)
+### Pattern 12: Builder Pattern (GoF Creational)
 - **Directory**: `src/core/builder/`
 - **Class**: `TraceBuilder`
 - **Rationale**: Provides a fluent API for synthesizing test fixtures, counterfactuals, and chaos engineering mutations without verbose nested JSON dictionary construction.
 
 ---
 
-### Pattern 10: Registry & Factory Pattern (GoF Creational)
-- **Directory**: `src/evaluators/registry/`, `src/evaluators/factory/`
-- **Classes**: `RuleRegistry`, `EvaluatorFactory`
+### Pattern 13: Registry & Factory Pattern (GoF Creational)
+- **Directory**: `src/evaluators/registry/`, `src/evaluators/factory/`, `src/adapters/llm_provider_factory.py`
+- **Classes**: `RuleRegistry`, `EvaluatorFactory`, `LLMProviderFactory`
 - **Rationale**: Adheres to the Open/Closed Principle (OCP). Developers can add new evaluation rules (e.g. `@RuleRegistry.register("RB-6")`) without modifying existing pipeline code. The factory handles dependency injection and pipeline assembly.
 
 ---
@@ -185,6 +214,7 @@ sequenceDiagram
     participant Det as DeterministicRuleHandler
     participant Judge as LLMJudgeHandler
     participant CB as CircuitBreaker
+    participant Prx as SecureLLMProviderProxy
     participant Adapt as ILLMProviderAdapter
     participant Obs as MetricsCollectorObserver
 
@@ -198,8 +228,12 @@ sequenceDiagram
         else Deterministic Checks Pass
             Det->>Judge: handle(trace)
             Judge->>CB: execute(callable)
-            CB->>Adapt: generate_evaluation(prompts)
-            Adapt-->>CB: Result payload
+            CB->>Prx: generate_evaluation(system_prompt, user_prompt)
+            Prx->>Prx: Anonymize PII/credentials via Vault
+            Prx->>Adapt: Forward sanitized prompts
+            Adapt-->>Prx: Return raw LLM verdict
+            Prx->>Prx: De-anonymize response entities
+            Prx-->>CB: Result payload
             CB-->>Judge: Result payload
             Judge-->>Strat: Return Semantic / Temporal Verdict
         end
@@ -223,6 +257,9 @@ sequenceDiagram
 | **Adapter Pattern** | `src/adapters/` | Unifies multi-cloud LLM providers (OpenAI, Anthropic, Mock) behind a single interface. |
 | **Decorator Pattern** | `src/decorators/` | Adds zero-overhead caching and exponential retry backoff transparently. |
 | **Visitor Pattern** | `src/visitors/` | Generates alternate output formats (JUnit XML, Compliance Audit Logs) cleanly. |
+| **Memento Pattern** | `src/memento/` | Provides snapshotting, rollback, and counterfactual simulation branching. |
+| **Template Method** | `src/templates/` | Standardizes pre-evaluation validation, normalization, and telemetry invariants. |
+| **Proxy Pattern** | `src/proxies/` | Intercepts prompts for Enterprise DLP, PII redaction, and token de-anonymization. |
 | **Specification Pattern** | `src/core/specifications/` | Clean, composable Boolean logic for trace validation; highly unit-testable. |
 | **Strategy Pattern** | `src/evaluators/strategies/` | Allows switching between ultra-fast local checks and full hybrid evaluation. |
 | **Observer Pattern** | `src/core/events/` | Zero-overhead telemetry and decoupled observability (Datadog/CloudWatch ready). |

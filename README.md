@@ -2,7 +2,7 @@
 
 A production-grade, tiered hybrid evaluation pipeline and scoring framework for autonomous workplace AI agents (Linear, GitHub, Slack, Datadog/CloudWatch metrics, application logs).
 
-Built with an uncompromising **100% Class-Based, One-Class-Per-File** architecture implementing **10 Enterprise & GoF Design Patterns** with comprehensive automated test coverage.
+Built with an uncompromising **100% Class-Based, One-Class-Per-File** architecture implementing **13 Enterprise & GoF Design Patterns** with comprehensive automated test coverage.
 
 ---
 
@@ -18,7 +18,7 @@ python3 checker.py
 python3 checker.py --format markdown
 ```
 
-### Run Full Test Suite (46 Tests across all Patterns & Edge Cases)
+### Run Full Test Suite (56 Tests across all 13 Patterns & Edge Cases)
 ```bash
 pytest -v
 # or using Makefile:
@@ -56,9 +56,10 @@ python3 checker.py --traces data/counterfactual_traces.json --format markdown
                             │
                             ▼
     ┌────────────────────────────────────────────────────────┐
-    │  STAGE 2: LLM Judge Engine with Resilience            │
+    │  STAGE 2: LLM Judge Engine with Full Resilience       │
     │  ----------------------------------------------------  │
     │  • Circuit Breaker (CLOSED / OPEN / HALF-OPEN)         │
+    │  • Secure DLP Proxy (PII/Token Anonymization Vault)    │
     │  • Multi-Provider LLM Adapters (OpenAI/Anthropic/Mock) │
     │  • Temporal Superseding Resolution (June 12 vs Mar 4)  │
     │  • Incident Telemetry & Root Cause Attribution (RB-5)  │
@@ -73,11 +74,11 @@ python3 checker.py --traces data/counterfactual_traces.json --format markdown
 ### Why a Tiered Hybrid Design?
 1. **Mathematical Safety**: Deterministic heuristics eliminate LLM judge non-determinism for structural violations (regex ticket tracking, boolean confidentiality tags, unconfirmed mutations).
 2. **Cost & Latency Efficiency**: 65%+ of severe failures are caught in **<1ms without firing an LLM API call**, saving over 70% in LLM API token spend.
-3. **Semantic Depth & Resilience**: The LLM judge is reserved for complex nuance with circuit breaker protection, caching decorators, and provider adapters.
+3. **Semantic Depth & Resilience**: The LLM judge is reserved for complex nuance with circuit breaker protection, caching decorators, DLP proxies, and provider adapters.
 
 ---
 
-## 3. Implemented Design Patterns Catalog
+## 3. Implemented Design Patterns Catalog (13 Patterns)
 
 | Pattern | Category | Package | Enterprise Responsibility & Benefit |
 | :--- | :--- | :--- | :--- |
@@ -86,6 +87,9 @@ python3 checker.py --traces data/counterfactual_traces.json --format markdown
 | **Adapter Pattern** | Structural | `src/adapters/` | Unifies multi-cloud LLM providers (OpenAI, Anthropic, Mock) behind a single interface. |
 | **Decorator Pattern** | Structural | `src/decorators/` | Adds zero-overhead caching and exponential retry backoff transparently. |
 | **Visitor Pattern** | Behavioral | `src/visitors/` | Generates alternate output formats (JUnit XML, Compliance Audit Logs) cleanly. |
+| **Memento Pattern** | Behavioral | `src/memento/` | Provides snapshotting, rollback, and counterfactual simulation branching. |
+| **Template Method** | Behavioral | `src/templates/` | Standardizes pre-evaluation validation, normalization, and telemetry invariants. |
+| **Proxy Pattern** | Structural | `src/proxies/` | Intercepts prompts for Enterprise DLP, PII redaction, and token de-anonymization. |
 | **Specification Pattern** | Domain Logic | `src/core/specifications/` | Clean, composable Boolean logic for trace validation; highly unit-testable. |
 | **Strategy Pattern** | Behavioral | `src/evaluators/strategies/` | Allows switching between ultra-fast local checks and full hybrid evaluation. |
 | **Observer Pattern** | Behavioral | `src/core/events/` | Zero-overhead telemetry and decoupled observability (Datadog/CloudWatch ready). |
@@ -97,9 +101,9 @@ python3 checker.py --traces data/counterfactual_traces.json --format markdown
 ## 4. Architectural Discipline: One Class Per File (AST Enforced)
 
 Every single Python component in `src/`, `tests/`, and `checker.py` follows strict OOP design:
-- **Exactly 1 class per file** (91 files total).
+- **Exactly 1 class per file** (108 files total).
 - **0 isolated / standalone functions** repository-wide.
-- Every rule, event, enum, model, visitor, adapter, and strategy is its own modular compilation unit.
+- Every rule, event, enum, model, visitor, adapter, proxy, template, and strategy is its own modular compilation unit.
 - Automated AST linting in CI verifies this structural invariant on every pull request.
 
 ---
@@ -131,7 +135,7 @@ Every single Python component in `src/`, `tests/`, and `checker.py` follows stri
 
 ## 6. Live Review Demonstration & Hypotheticals
 
-The system is tested against dynamic runtime perturbations via `data/counterfactual_traces.json`:
+The system is tested against dynamic runtime perturbations via `data/counterfactual_traces.json` and in-memory Memento snapshots:
 
 1. **Hypothetical 1: Linear search succeeds with empty list (Trace 6)**
    - When `linear_search` returns `result: []` (without timeout), `ToolErrorMaskingRule` detects no infrastructure failure, and the trace **passes**.

@@ -107,3 +107,31 @@ class TestTraceMemento:
         eval_restored = pipeline.evaluate_trace(originator.get_trace())
         assert eval_restored.result == EvalVerdict.FAIL
         assert eval_restored.is_release_blocker is True
+
+    def test_redact_confidential_metadata(self):
+        trace = (
+            TraceBuilder(7)
+            .with_tool_call("api1", result={"is_confidential": True, "secret": "data"})
+            .with_tool_call("api2", result=[{"is_confidential": True, "note": "classified"}])
+            .build()
+        )
+        originator = TraceOriginator(trace)
+        originator.redact_confidential_metadata()
+        sanitized = originator.get_trace()
+
+        assert sanitized.tool_calls[0].result["is_confidential"] is False
+        assert sanitized.tool_calls[1].result[0]["is_confidential"] is False
+
+    def test_caretaker_empty_pop_and_clear(self):
+        caretaker = TraceCaretaker()
+        assert caretaker.pop_last_checkpoint() is None
+        assert caretaker.get_checkpoint("non_existent") is None
+
+        trace = TraceBuilder(1).build()
+        originator = TraceOriginator(trace)
+        caretaker.save_checkpoint("cp1", originator.create_memento())
+        assert len(caretaker.list_checkpoints()) == 1
+
+        caretaker.clear()
+        assert len(caretaker.list_checkpoints()) == 0
+        assert caretaker.pop_last_checkpoint() is None

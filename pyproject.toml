@@ -26,3 +26,11 @@ stackgen-eval = "checker:main"
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 pythonpath = ["."]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "@(abc\\.)?abstractmethod",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:"
+]

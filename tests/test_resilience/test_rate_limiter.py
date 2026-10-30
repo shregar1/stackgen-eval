@@ -34,3 +34,11 @@ class TestRateLimiter:
         # Waiting 0.05 seconds with 0.1 token/sec refill will time out
         granted = limiter.wait_and_acquire(tokens=1, timeout=0.05)
         assert granted is False
+
+    def test_wait_and_acquire_success(self):
+        # 6000 RPM = 100 tokens/sec
+        limiter = TokenBucketRateLimiter(requests_per_minute=6000.0, burst_capacity=1)
+        assert limiter.acquire(1) is True
+        # Immediately empty, wait_and_acquire should succeed in ~0.02s
+        granted = limiter.wait_and_acquire(tokens=1, timeout=0.5)
+        assert granted is True

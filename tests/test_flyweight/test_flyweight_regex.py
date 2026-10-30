@@ -38,3 +38,11 @@ class TestFlyweightRegex:
         reg1 = FlyweightRegexRegistry.get_instance()
         reg2 = FlyweightRegexRegistry.get_instance()
         assert reg1 is reg2
+
+    def test_clear_cache(self):
+        registry = FlyweightRegexRegistry()
+        registry.get_pattern(r"\d+")
+        assert registry.misses == 1
+        registry.clear()
+        assert registry.misses == 0
+        assert registry.hits == 0

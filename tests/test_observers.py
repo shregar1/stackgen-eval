@@ -93,4 +93,5 @@ class TestObserverPattern:
         assert collector.release_blockers == 1
         assert len(collector.latencies_ms) == 2
         assert collector.avg_latency_ms >= 0.0
+        assert collector.p95_latency_ms >= 0.0
         assert "RB-4: Hallucinated Primary Entities" in collector.rule_triggers

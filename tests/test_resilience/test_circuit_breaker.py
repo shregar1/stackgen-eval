@@ -65,3 +65,21 @@ class TestCircuitBreaker:
         res = cb.call(op.execute)
         assert res == "SUCCESS"
         assert cb.state == CircuitState.CLOSED
+
+    def test_half_open_failure_reopens_circuit(self):
+        import time
+        cb = CircuitBreaker(failure_threshold=1, recovery_threshold=2, reset_timeout_seconds=0.01)
+
+        def raise_err():
+            raise RuntimeError("failure")
+
+        with pytest.raises(RuntimeError):
+            cb.call(raise_err)
+        assert cb._state == CircuitState.OPEN
+
+        time.sleep(0.02)
+        assert cb.state == CircuitState.HALF_OPEN
+
+        with pytest.raises(RuntimeError):
+            cb.call(raise_err)
+        assert cb._state == CircuitState.OPEN

@@ -54,3 +54,15 @@ class TestAuditLedger:
         tampered_batch = EvaluationBatchResult(summary=tampered_summary, traces=[tampered_eval])
 
         assert ledger.verify_batch_signature(tampered_batch, valid_signature) is False
+
+    def test_signs_single_evaluation(self):
+        ledger = CryptographicAuditLedger(secret_key="test-single-key")
+        trace_eval = TraceEvaluation(
+            trace_id=42,
+            evaluator_type=EvaluatorType.LLM_JUDGE,
+            result=EvalVerdict.PASS,
+            reasons=[]
+        )
+        sig = ledger.sign_evaluation(trace_eval)
+        assert len(sig) == 64
+        assert isinstance(sig, str)

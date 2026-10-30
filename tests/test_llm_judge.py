@@ -49,3 +49,22 @@ class TestLLMJudgeEngine:
         assert eval_res.result == EvalVerdict.FAIL
         assert eval_res.is_release_blocker is True
         assert eval_res.release_blocker_category == ReleaseBlockerCategory.RB_5_FABRICATED_ROOT_CAUSE
+
+    def test_judge_without_dlp_proxy(self):
+        from src.adapters.mock_llm_provider_adapter import MockLLMProviderAdapter
+        raw_adapter = MockLLMProviderAdapter()
+        judge = LLMJudgeEngine(adapter=raw_adapter, enable_dlp_proxy=False)
+        assert judge.adapter is raw_adapter
+
+    def test_judge_fallback_on_adapter_failure(self):
+        from unittest.mock import MagicMock
+        from src.adapters.i_llm_provider_adapter import ILLMProviderAdapter
+
+        failing_adapter = MagicMock(spec=ILLMProviderAdapter)
+        failing_adapter.generate_evaluation.side_effect = RuntimeError("API unavailable")
+        failing_adapter.provider_name = "failing_mock"
+
+        judge = LLMJudgeEngine(adapter=failing_adapter, enable_dlp_proxy=False)
+        trace = Trace(trace_id=3, request="Status?", available_tools=[], tool_calls=[], reply="all good")
+        eval_res = judge.evaluate(trace)
+        assert eval_res.result == EvalVerdict.PASS

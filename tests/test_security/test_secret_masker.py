@@ -44,3 +44,9 @@ class TestSecretMasker:
         masked = masker.mask_secrets(text)
         assert "9xK7zL2pQ8mR4wV1tY6nB3cE" not in masked
         assert "[REDACTED_" in masked
+
+    def test_empty_inputs(self):
+        masker = HighEntropySecretMasker()
+        assert masker.mask_secrets("") == ""
+        assert masker.mask_secrets(None) is None
+        assert HighEntropySecretMasker.calculate_shannon_entropy("") == 0.0

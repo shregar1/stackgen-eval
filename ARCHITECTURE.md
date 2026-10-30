@@ -14,7 +14,7 @@ The core thesis of this architecture is **Pareto-Optimal Hybrid Evaluation**:
 To enforce strict enterprise separation of concerns, the entire repository adheres to an uncompromising architectural rule:
 1. **Exactly ONE Class per `.py` File**: Every single component, enum, rule, event, visitor, adapter, proxy, template, memento, executor, security guard, and flyweight registry resides in its own isolated file.
 2. **Zero Isolated Functions**: No standalone module-level helper functions exist in the repository; every behavior is an encapsulated method of a class.
-3. **Automated AST Gate**: Verified in CI through Python's `ast` parser across all 128 source and test modules.
+3. **Automated AST Gate**: Verified in CI through Python's `ast` parser across all 129 source and test modules.
 
 ```mermaid
 flowchart TD

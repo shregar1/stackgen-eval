@@ -32,3 +32,8 @@ class TestAdversarialPromptArmor:
         _, nonce1 = armor.armor_evidence("test 1")
         _, nonce2 = armor.armor_evidence("test 2")
         assert nonce1 != nonce2
+
+    def test_empty_input(self):
+        armor = AdversarialPromptArmor()
+        assert armor.detect_injection_attempt("") is False
+        assert armor.detect_injection_attempt(None) is False

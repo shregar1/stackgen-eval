@@ -55,3 +55,22 @@ class TestEvaluationTemplate:
         assert evaluation.evaluator_type == EvaluatorType.LLM_JUDGE
         assert evaluation.result == EvalVerdict.FAIL
         assert evaluator.last_elapsed_ms >= 0.0
+
+    def test_template_normalizes_pass_verdict_with_blocker(self, monkeypatch):
+        evaluator = TemplatedDeterministicEvaluator()
+        trace = TraceBuilder(1).build()
+        from src.models.trace_evaluation import TraceEvaluation
+        from src.models.release_blocker_category import ReleaseBlockerCategory
+        mock_eval = TraceEvaluation(
+            trace_id=1,
+            evaluator_type=EvaluatorType.DETERMINISTIC,
+            result=EvalVerdict.PASS,
+            is_release_blocker=True,
+            release_blocker_category=ReleaseBlockerCategory.RB_1_UNCONFIRMED_ACTION,
+            reasons=[]
+        )
+        monkeypatch.setattr(evaluator, "_do_evaluate", lambda t: mock_eval)
+        normalized = evaluator.evaluate(trace)
+        assert normalized.result == EvalVerdict.PASS
+        assert normalized.is_release_blocker is False
+        assert normalized.release_blocker_category == ReleaseBlockerCategory.NONE

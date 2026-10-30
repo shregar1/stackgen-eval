@@ -38,3 +38,20 @@ class TestPayloadBounds:
         assert sanitized.request == "Standard request"
         assert sanitized.reply == "Standard reply"
         assert guard.total_truncations == 0
+
+    def test_truncates_oversized_tool_payloads(self):
+        guard = PayloadBoundsGuard(max_field_length=1000, max_tool_payload_length=40)
+        trace = (
+            TraceBuilder(3)
+            .with_tool_call(
+                "big_tool",
+                request={"huge_query": "X" * 100},
+                result={"huge_result": "Y" * 100}
+            )
+            .build()
+        )
+
+        sanitized = guard.sanitize_trace(trace)
+        assert guard.total_truncations == 2
+        assert "truncated_payload" in sanitized.tool_calls[0].request
+        assert "truncated_payload" in sanitized.tool_calls[0].result

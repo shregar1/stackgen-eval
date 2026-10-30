@@ -47,3 +47,15 @@ class TestSecureLLMProxy:
         underlying = MockLLMProviderAdapter()
         proxy = SecureLLMProviderProxy(underlying)
         assert proxy.provider_name == "secure_proxy(mock)"
+
+    def test_vault_empty_and_clear(self):
+        vault = AnonymizationVault()
+        assert vault.anonymize("") == ""
+        assert vault.anonymize(None) is None
+        assert vault.deanonymize("") == ""
+        assert vault.deanonymize(None) is None
+
+        vault.anonymize("Jordan")
+        assert vault.redactions_count > 0
+        vault.clear()
+        assert vault.redactions_count == 0

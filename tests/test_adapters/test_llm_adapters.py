@@ -46,3 +46,47 @@ class TestLLMProviderAdapters:
         cfg = EvaluationConfig(llm_provider="anthropic", llm_model="claude-3-5-sonnet")
         adapter = LLMProviderFactory.create(cfg)
         assert adapter.provider_name == "anthropic"
+
+    def test_openai_provider_adapter_generate(self, monkeypatch):
+        from unittest.mock import MagicMock
+        from src.adapters.openai_provider_adapter import OpenAIProviderAdapter
+        import httpx
+
+        mock_resp = MagicMock()
+        mock_resp.json.return_value = {
+            "choices": [{"message": {"content": '{"result": "pass", "reasons": []}'}}]
+        }
+        mock_resp.raise_for_status.return_value = None
+
+        mock_client = MagicMock()
+        mock_client.post.return_value = mock_resp
+        mock_client.__enter__.return_value = mock_client
+        mock_client.__exit__.return_value = None
+
+        monkeypatch.setattr(httpx, "Client", lambda **kwargs: mock_client)
+
+        adapter = OpenAIProviderAdapter(api_key="sk-test")
+        result = adapter.generate_evaluation("sys", "user")
+        assert result["result"] == "pass"
+
+    def test_anthropic_provider_adapter_generate(self, monkeypatch):
+        from unittest.mock import MagicMock
+        from src.adapters.anthropic_provider_adapter import AnthropicProviderAdapter
+        import httpx
+
+        mock_resp = MagicMock()
+        mock_resp.json.return_value = {
+            "content": [{"text": "```json\n{\"result\": \"fail\", \"reasons\": [\"omission\"]}\n```"}]
+        }
+        mock_resp.raise_for_status.return_value = None
+
+        mock_client = MagicMock()
+        mock_client.post.return_value = mock_resp
+        mock_client.__enter__.return_value = mock_client
+        mock_client.__exit__.return_value = None
+
+        monkeypatch.setattr(httpx, "Client", lambda **kwargs: mock_client)
+
+        adapter = AnthropicProviderAdapter(api_key="ant-test")
+        result = adapter.generate_evaluation("sys", "user")
+        assert result["result"] == "fail"

@@ -37,11 +37,22 @@ python3 checker.py --format junit
 python3 checker.py --format audit --sign
 ```
 
-### Run Full Test Suite (100 Tests, 99% Coverage across 14 Patterns & Security Guards)
+### Run Full Test Suite (104 Tests across all 14 Patterns, Security Guards & Web Benchmarks)
 ```bash
 pytest -v --cov=src --cov-report=term-missing
 # or using Makefile:
 make test
+```
+
+### Run Real-World Workplace Benchmarks Dataset
+```bash
+# Evaluate 8 realistic production multi-tool trajectories across GitHub, AWS, Datadog, Slack, and Linear:
+python3 checker.py --traces data/real_world_workplace_benchmarks.json --format markdown --sign
+```
+
+### Run Web Benchmark Test (Berkeley Function Calling Leaderboard from Hugging Face)
+```bash
+pytest tests/test_real_world_evaluation.py -v
 ```
 
 ### Run CI/CD Release Blocker Gate (Exit code 1 if Blockers Exist)
@@ -136,7 +147,7 @@ Located in `src/security/`:
 ## 5. Architectural Discipline: One Class Per File (AST Enforced)
 
 Every single Python component in `src/`, `tests/`, and `checker.py` follows strict OOP design:
-- **Exactly 1 class per file** (129 files total).
+- **Exactly 1 class per file** (131 files total).
 - **0 isolated / standalone functions** repository-wide.
 - Automated AST linting in CI verifies this structural invariant on every build.
 

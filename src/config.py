@@ -11,7 +11,10 @@ class EvaluationConfig(BaseModel):
     mutating_tools: Set[str] = Field(
         default_factory=lambda: {
             "slack_send",
+            "slack_broadcast",
             "github_merge",
+            "github_merge_pr",
+            "github_close_pr",
             "linear_create",
             "linear_update",
             "linear_delete",

@@ -60,7 +60,7 @@ class EvaluationConfig(BaseModel):
     )
 
     # LLM Judge settings
-    llm_provider: str = Field(default="mock", description="LLM provider: 'mock', 'openai', 'anthropic', 'gemini'.")
+    llm_provider: str = Field(default="mock", description="LLM provider: 'mock', 'openai', 'anthropic', 'deepseek'.")
     llm_model: str = Field(default="gpt-4o", description="Target model for LLM judge.")
     llm_temperature: float = Field(default=0.0, description="Temperature for evaluation (0 for deterministic reproducibility).")
     llm_max_retries: int = Field(default=3, description="Max retries on API failure.")

@@ -62,6 +62,19 @@ class EvaluationCLI:
             help="Evaluation execution mode"
         )
         parser.add_argument(
+            "--provider",
+            type=str,
+            choices=["mock", "openai", "anthropic", "deepseek"],
+            default=None,
+            help="LLM provider: mock, openai, anthropic, or deepseek"
+        )
+        parser.add_argument(
+            "--model",
+            type=str,
+            default=None,
+            help="Target model identifier (e.g. deepseek-chat, deepseek-reasoner, gpt-4o, claude-3-5-sonnet)"
+        )
+        parser.add_argument(
             "--fail-on-blocker",
             action="store_true",
             help="Exit with return code 1 if any release blocker is encountered"
@@ -93,11 +106,17 @@ class EvaluationCLI:
         log_level = logging.DEBUG if args.verbose else logging.WARNING
         logging.basicConfig(level=log_level, format="%(levelname)s: %(message)s", stream=sys.stderr)
 
-        config = EvaluationConfig(
-            mode=args.mode,
-            fail_on_blocker=args.fail_on_blocker,
-            concurrency=args.concurrency
-        )
+        config_kwargs = {
+            "mode": args.mode,
+            "fail_on_blocker": args.fail_on_blocker,
+            "concurrency": args.concurrency
+        }
+        if args.provider:
+            config_kwargs["llm_provider"] = args.provider
+        if args.model:
+            config_kwargs["llm_model"] = args.model
+
+        config = EvaluationConfig(**config_kwargs)
 
         try:
             traces = TraceLoader.load(args.traces)

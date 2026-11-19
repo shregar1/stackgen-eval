@@ -4,6 +4,7 @@ import subprocess
 import json
 import sys
 import pytest
+from checker import EvaluationCLI
 
 
 class TestEvaluationCLI:
@@ -42,3 +43,9 @@ class TestEvaluationCLI:
         )
         assert result.returncode == 1
         assert "CI FAILURE" in result.stderr
+
+    def test_cli_provider_and_model_args(self):
+        parser = EvaluationCLI.build_argument_parser()
+        args = parser.parse_args(["--provider", "deepseek", "--model", "deepseek-chat"])
+        assert args.provider == "deepseek"
+        assert args.model == "deepseek-chat"

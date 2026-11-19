@@ -1,6 +1,7 @@
 """Pydantic schemas and data contracts for traces and evaluation results."""
 
 from src.models.release_blocker_category import ReleaseBlockerCategory
+from src.models.ticket_category import TicketCategory
 from src.models.eval_verdict import EvalVerdict
 from src.models.evaluator_type import EvaluatorType
 from src.models.tool_call import ToolCall
@@ -12,6 +13,7 @@ from src.models.llm_judge_output_schema import LLMJudgeOutputSchema
 
 __all__ = [
     "ReleaseBlockerCategory",
+    "TicketCategory",
     "EvalVerdict",
     "EvaluatorType",
     "ToolCall",

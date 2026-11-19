@@ -1,14 +1,15 @@
-"""Anthropic Claude Provider Adapter."""
+"""Anthropic Claude Provider Adapter with Structured Output Validation."""
 
 import os
 import json
 from typing import Dict, Any, Optional
 import httpx
 from src.adapters.i_llm_provider_adapter import ILLMProviderAdapter
+from src.models.llm_judge_output_schema import LLMJudgeOutputSchema
 
 
 class AnthropicProviderAdapter(ILLMProviderAdapter):
-    """Adapter connecting to Anthropic Messages API."""
+    """Adapter connecting to Anthropic Messages API with structured output schema validation."""
 
     def __init__(
         self,
@@ -27,11 +28,19 @@ class AnthropicProviderAdapter(ILLMProviderAdapter):
         return "anthropic"
 
     def generate_evaluation(self, system_prompt: str, user_prompt: str) -> Dict[str, Any]:
+        schema_json = json.dumps(LLMJudgeOutputSchema.model_json_schema(), indent=2)
+        augmented_system = (
+            f"{system_prompt}\n\n"
+            f"You MUST format your output strictly as a JSON object adhering to this JSON Schema:\n"
+            f"{schema_json}\n"
+            f"Return ONLY valid raw JSON."
+        )
+
         payload = {
             "model": self.model,
             "max_tokens": 1024,
             "temperature": self.temperature,
-            "system": system_prompt + "\nReturn ONLY valid JSON matching the schema.",
+            "system": augmented_system,
             "messages": [
                 {"role": "user", "content": user_prompt}
             ]
@@ -55,4 +64,6 @@ class AnthropicProviderAdapter(ILLMProviderAdapter):
                 content = content.split("```json")[1].split("```")[0].strip()
             elif "```" in content:
                 content = content.split("```")[1].split("```")[0].strip()
-            return json.loads(content)
+            parsed_raw = json.loads(content)
+            validated = LLMJudgeOutputSchema.model_validate(parsed_raw)
+            return validated.model_dump()

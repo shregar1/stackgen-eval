@@ -1,14 +1,15 @@
-"""OpenAI / Compatible Provider Adapter with JSON Mode."""
+"""OpenAI / Compatible Provider Adapter with Structured JSON Schema."""
 
 import os
 import json
 from typing import Dict, Any, Optional
 import httpx
 from src.adapters.i_llm_provider_adapter import ILLMProviderAdapter
+from src.models.llm_judge_output_schema import LLMJudgeOutputSchema
 
 
 class OpenAIProviderAdapter(ILLMProviderAdapter):
-    """Adapter connecting to OpenAI or OpenAI-compatible endpoints (vLLM, Ollama, Groq)."""
+    """Adapter connecting to OpenAI or OpenAI-compatible endpoints with strict structured schema."""
 
     def __init__(
         self,
@@ -32,7 +33,14 @@ class OpenAIProviderAdapter(ILLMProviderAdapter):
         payload = {
             "model": self.model,
             "temperature": self.temperature,
-            "response_format": {"type": "json_object"},
+            "response_format": {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "llm_judge_evaluation",
+                    "strict": True,
+                    "schema": LLMJudgeOutputSchema.model_json_schema()
+                }
+            },
             "messages": [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}
@@ -51,4 +59,6 @@ class OpenAIProviderAdapter(ILLMProviderAdapter):
             response.raise_for_status()
             data = response.json()
             content = data["choices"][0]["message"]["content"]
-            return json.loads(content)
+            parsed_raw = json.loads(content)
+            validated = LLMJudgeOutputSchema.model_validate(parsed_raw)
+            return validated.model_dump()

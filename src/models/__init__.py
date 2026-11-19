@@ -8,6 +8,7 @@ from src.models.trace import Trace
 from src.models.trace_evaluation import TraceEvaluation
 from src.models.evaluation_summary import EvaluationSummary
 from src.models.evaluation_batch_result import EvaluationBatchResult
+from src.models.llm_judge_output_schema import LLMJudgeOutputSchema
 
 __all__ = [
     "ReleaseBlockerCategory",
@@ -18,4 +19,5 @@ __all__ = [
     "TraceEvaluation",
     "EvaluationSummary",
     "EvaluationBatchResult",
+    "LLMJudgeOutputSchema",
 ]
